@@ -13,7 +13,7 @@ then
         export PINPATH
         export RAMULATORPATH
         export LIBCONFIGPATH
-        scons -j$NUMCPUS
+        python2 `which scons` -j$NUMCPUS
 
 elif [ "$1" = "r" ]
 then
@@ -37,5 +37,5 @@ else
 	cd ..
 
 	export PINPATH
-	scons -j$NUMCPUS
+	python2 `which scons` -j$NUMCPUS
 fi

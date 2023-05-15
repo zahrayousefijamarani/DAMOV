@@ -15,4 +15,4 @@ make clean
 cd ..
 
 export PINPATH
-scons -c
+python2 `which scons` -c

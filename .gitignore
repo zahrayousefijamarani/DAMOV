@@ -1,0 +1,17 @@
+*.depo
+*.dep
+*.deppo
+*.po
+*.log
+*.so
+*.o
+*.pc
+simulator/zsim_stats*/*
+*.out
+*.csv
+simulator/.vscode/settings.json
+workloads/
+damov_workloads.tar.gz
+megatools-1.11.1.20230212-linux-x86_64.tar.gz
+megatools-1.11.1.20230212-linux-x86_64/
+simulator/build/
