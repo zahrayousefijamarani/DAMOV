@@ -1,4 +1,4 @@
-prefix=/localhome/zya122/DRAM/simulator/libconfig
+prefix=/home/zahra/DAMOV/simulator/libconfig
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
