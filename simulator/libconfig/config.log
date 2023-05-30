@@ -655,11 +655,11 @@ configure:16453: checking lex output file root
 configure:16467: result: lex.yy
 configure:16472: checking lex library
 configure:16486: gcc -o conftest -g -O2   conftest.c   >&5
-/tmp/cck8EKRe.o: In function `input':
+/tmp/ccrjQQzJ.o: In function `input':
 /home/zahra/DAMOV/simulator/libconfig/lex.yy.c:1180: undefined reference to `yywrap'
-/tmp/cck8EKRe.o: In function `yylex':
+/tmp/ccrjQQzJ.o: In function `yylex':
 /home/zahra/DAMOV/simulator/libconfig/lex.yy.c:871: undefined reference to `yywrap'
-/tmp/cck8EKRe.o: In function `main':
+/tmp/ccrjQQzJ.o: In function `main':
 /home/zahra/DAMOV/simulator/libconfig/conftest.l:17: undefined reference to `yywrap'
 collect2: error: ld returned 1 exit status
 configure:16486: $? = 1

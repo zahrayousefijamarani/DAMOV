@@ -601,8 +601,38 @@ public:
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
                   (*read_latency_sum) += req.depart - req.arrive;
-                    channel->update_serving_requests(
-                      req.addr_vec.data(), -1, clk);
+                  ofstream myfile;
+                  myfile.open ("zahra_read_latency.txt", ios::app);
+                  myfile << req.depart - req.arrive;
+                  myfile << ", ";
+		  switch(int(req.type)){
+			case int(Request::Type::READ): myfile << "read"; break;
+			case int(Request::Type::WRITE): myfile << "write"; break;
+			case int(Request::Type::REFRESH): myfile << "refresh"; break;
+			case int(Request::Type::POWERDOWN) : myfile << "powerdown"; break;
+			case int(Request::Type::SELFREFRESH) : myfile << "selfrefresh"; break;
+			case int(Request::Type::EXTENSION): myfile << "extension"; break;
+			case int(Request::Type::MAX): myfile << "max"; break;
+		  }
+		  //myfile << req.Type;
+		  myfile << ", ";
+		  myfile << req.addr;
+		  myfile << ", ";
+		  myfile << channel->spec->standard_name;
+		  myfile << ", bank:";  
+		  int bank_id = req.addr_vec[int(T::Level::Bank)];
+          	  if (channel->spec->standard_name == "DDR4" || channel->spec->standard_name == "GDDR5" || channel->spec->standard_name == "HBM") {
+              		// if has bankgroup
+              		bank_id += req.addr_vec[int(T::Level::Bank) - 1] * channel->spec->org_entry.count[int(T::Level::Bank)];
+          	  }
+		  myfile << bank_id;
+		  myfile << ", channel: " ,
+		  myfile << channel->id;
+		  myfile << "\n";
+                  myfile.close();
+                  
+		  channel->update_serving_requests(
+                  req.addr_vec.data(), -1, clk);
                 }
 
                 req.callback(req);
