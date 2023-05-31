@@ -628,6 +628,12 @@ public:
 		  myfile << bank_id;
 		  myfile << ", channel: " ,
 		  myfile << channel->id;
+          myfile << ", rank:";
+          myfile << req.addr_vec[int(T::Level::Rank)];
+          myfile << ", column:";
+          myfile << req.addr_vec[int(T::Level::Column)];
+          myfile << ", row:";  
+          myfile << req.addr_vec[int(T::Level::Row)];
 		  myfile << "\n";
                   myfile.close();
                   
