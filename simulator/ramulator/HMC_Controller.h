@@ -8,10 +8,15 @@
 #include <list>
 #include <string>
 #include <vector>
+
 #include "Controller.h"
 #include "Scheduler.h"
+
 #include "HMC.h"
 #include "Packet.h"
+
+//#include "libdrampower/LibDRAMPower.h"
+//#include "xmlparser/MemSpecParser.h"
 
 using namespace std;
 
@@ -88,8 +93,11 @@ public:
     ScalarStat io_term_energy;
 
     ScalarStat ref_energy;
+
     ScalarStat total_energy;
     ScalarStat average_power;
+
+    // drampower counter
 
     // Number of activate commands
     ScalarStat numberofacts_s;
@@ -145,6 +153,7 @@ public:
     // Number of precharged auto-refresh cycles during self-refresh exit
     ScalarStat spup_ref_pre_cycles_s;
 
+    //libDRAMPower* drampower;
     long update_counter = 0;
 
 public:
@@ -159,8 +168,25 @@ public:
 
     struct Queue {
         list<Request> q;
+        list<Request> arrivel_q;
         unsigned int max = 32; // TODO queue qize
         unsigned int size() {return q.size();}
+        void update(){
+          for (auto& i : arrivel_q) {
+            i.hops -= 1;
+            if(i.hops <= 0){
+              q.push_back(i);
+            }
+          }
+
+          list<Request> tmp;
+          for(auto& i : arrivel_q){
+            if(i.hops > 0){
+              tmp.push_back(i);
+            }
+          }
+          arrivel_q = tmp;
+        }
     };
 
     Queue readq;  // queue for read requests
@@ -210,7 +236,13 @@ public:
                 cmd_trace_prefix + "chan-" + to_string(channel->id)
                 + ".cmdtrace");
         }
-        with_drampower = false;
+        //if (configs["drampower_memspecs"] != "") {
+          with_drampower = false;
+          //drampower = new libDRAMPower(
+            //  Data::MemSpecParser::getMemSpecFromXML(
+              //    configs["drampower_memspecs"]),
+             // true);
+      //  }
         if (configs["no_DRAM_latency"] == "true") {
           no_DRAM_latency = true;
           scheduler->type = Scheduler<HMC>::Type::FRFCFS;
@@ -560,8 +592,11 @@ public:
         req.burst_count = 2; //TSV = 32 bytes, request = 64 bytes -> 2 bursts
 
       req.transaction_bytes = channel->spec->payload_flits * 16;
+      //printf("req.burst_count %d", req.burst_count);
       debug_hmc("req.reqid %d, req.coreid %d", req.reqid, req.coreid);
+      // buffer packet, for future response packet
       incoming_packets_buffer[req.reqid] = packet;
+      //cout << "HMC Controller received an request with address " << req.addr << endl;
       return enqueue(req);
     }
 
@@ -569,11 +604,17 @@ public:
       req.burst_count = 2; //TSV = 32 bytes, request = 64 bytes -> 2 bursts
 
       req.transaction_bytes = channel->spec->payload_flits * 16;
+      //printf("req.burst_count %d", req.burst_count);
       debug_hmc("req.reqid %d, req.coreid %d", req.reqid, req.coreid);
+      // buffer packet, for future response packet
+      //cout << "HMC Controller received an request with address " << req.addr << endl;
       return enqueue(req);
     }
 
     void finish(long dram_cycles) {
+      // finalize DRAMPower
+
+      // finalize DRAM status
       channel->finish(dram_cycles);
     }
 
@@ -596,7 +637,7 @@ public:
         }
 
         req.arrive = clk;
-        queue.q.push_back(req);
+        queue.arrivel_q.push_back(req);
         // shortcut for read requests, if a write to same addr exists
         // necessary for coherence
         if (req.type == Request::Type::READ && find_if(writeq.q.begin(), writeq.q.end(),
@@ -634,6 +675,7 @@ public:
       // Don't forget to release the space for incoming packet
       incoming_packets_buffer.erase(req.reqid);
 
+      //cout << "HMC Controller has prepared a response packet with addr " << req.addr << " and _addr " << req._addr << endl;
       return packet;
     }
 
@@ -645,43 +687,16 @@ public:
         (*read_req_queue_length_sum) += readq.size() + pending.size();
         (*write_req_queue_length_sum) += writeq.size();
 
+
+        readq.update();
+        writeq.update();
+        otherq.update();
         /*** 1. Serve completed reads ***/
         if (pending.size()) {
           Request& req = pending[0];
           if (req.depart <= clk) {
             if (req.depart - req.arrive > 1) {
-                channel->update_serving_requests(req.addr_vec.data(), -1, clk);
-                ofstream myfile;
-                myfile.open ("zahra_read_latency_hmc.txt", ios::app);
-                myfile << req.depart_hmc - req.arrive_hmc;
-                myfile << ", ";
-                myfile << req.depart - req.arrive;
-                myfile << ", ";
-                switch(int(req.type)){
-                    case int(Request::Type::READ): myfile << "read"; break;
-                    case int(Request::Type::WRITE): myfile << "write"; break;
-                    case int(Request::Type::REFRESH): myfile << "refresh"; break;
-                    case int(Request::Type::POWERDOWN) : myfile << "powerdown"; break;
-                    case int(Request::Type::SELFREFRESH) : myfile << "selfrefresh"; break;
-                    case int(Request::Type::EXTENSION): myfile << "extension"; break;
-                    case int(Request::Type::MAX): myfile << "max"; break;
-                }
-                myfile << ", ";
-                myfile << req.addr;
-                myfile << ", ";
-                myfile << "HMC";
-                myfile << ", vault: " ,
-                myfile << req.addr_vec[int(HMC::Level::Vault)];
-                myfile << ", bank:"; 
-                myfile << req.addr_vec[int(HMC::Level::Bank)];
-                myfile << ", bankgroup";
-                myfile << req.addr_vec[int(HMC::Level::BankGroup)];
-                myfile << ", column:"; 
-                myfile << req.addr_vec[int(HMC::Level::Column)];
-                myfile << ", row:"; 
-                myfile << req.addr_vec[int(HMC::Level::Row)];
-                myfile << "\n";
-                myfile.close();
+              channel->update_serving_requests(req.addr_vec.data(), -1, clk);
             }
 
             if(pim_mode_enabled){
@@ -777,9 +792,8 @@ public:
         issue_cmd(cmd, get_addr_vec(cmd, req));
 
         // check whether this is the last command (which finishes the request)
-        if (cmd != channel->spec->translate[int(req->type)]){
+        if (cmd != channel->spec->translate[int(req->type)])
             return;
-        }
 
         // set a future completion time for read requests
         if (req->type == Request::Type::READ) {
@@ -795,12 +809,29 @@ public:
             if (req->burst_count == 0) {
               req->depart = clk + channel->spec->write_latency;
               pending.push_back(*req);
+              /*if(pim_mode_enabled){
+                pending.push_back(*req);
+              }
+              else{
+                Packet packet = form_response_packet(*req);
+                response_packets_buffer.push_back(packet);
+                channel->update_serving_requests(req->addr_vec.data(), -1, clk);
+              }*/
             }
         }
+
 
         // remove request from queue
         if (req->burst_count == 0) {
           queue->q.erase(req);
+
+
+          /*if (queue->size() <= queue->max){
+            if(overflow.size() > 0 && overflow.q.front().type == req->type){
+              queue->q.push_back(overflow.q.front());
+              overflow.q.pop_front();
+            }
+          }*/
         }
 
     }
@@ -883,8 +914,11 @@ private:
           int bank_id = addr_vec[int(HMC::Level::Bank)];
           bank_id += addr_vec[int(HMC::Level::Bank) - 1] * channel->spec->org_entry.count[int(HMC::Level::Bank)];
           printf("%ld %d\n", clk, bank_id);
+          //drampower->doCommand(Data::MemCommand::getTypeFromName(cmd_name), bank_id, clk);
+
           update_counter++;
           if (update_counter == 1000000) {
+            //  drampower->updateCounters(false); // not the last update
               update_counter = 0;
           }
         }
