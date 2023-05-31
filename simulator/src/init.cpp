@@ -31,6 +31,7 @@
 #include <string>
 #include <sys/time.h>
 #include <vector>
+#include "accelerator_core.h"
 #include "cache.h"
 #include "cache_arrays.h"
 #include "config.h"
@@ -53,6 +54,8 @@
 #include "log.h"
 #include "mem_ctrls.h"
 #include "network.h"
+#include "fixed_delay_network.h"
+#include "mesh_network_md1.h"
 #include "null_core.h"
 #include "ooo_core.h"
 #include "part_repl_policies.h"
@@ -74,9 +77,10 @@
 #include "trace_driver.h"
 #include "tracing_cache.h"
 #include "virt/port_virtualizer.h"
-#include "weave_md1_mem.h" //validation, could be taken out...
+#include "weave_md1_mem.h"
 #include "zsim.h"
 
+std::string application_path;
 extern void EndOfPhaseActions(); //in zsim.cpp
 
 /* zsim should be initialized in a deterministic and logical order, to avoid re-reading config vars
@@ -134,7 +138,6 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name, 
         } else if (hashType == "H3") {
             //STL hash function
             size_t seed = _Fnv_hash_bytes(prefix.c_str(), prefix.size()+1, 0xB4AC5B);
-            //info("%s -> %lx", prefix.c_str(), seed);
             hf = new H3HashFamily(numHashes, setBits, 0xCAC7EAFFA1 + seed /*make randSeed depend on prefix*/);
         } else if (hashType == "SHA1") {
             hf = new SHA1HashFamily(numHashes);
@@ -369,7 +372,6 @@ MemObject* BuildMemoryController(Config& config, uint32_t lineSize, uint32_t fre
         string outputDir = config.get<const char*>("sys.mem.outputDir");
         string traceName = config.get<const char*>("sys.mem.traceName");
         mem = new DRAMSimMemory(dramTechIni, dramSystemIni, outputDir, traceName, capacity, cpuFreqHz, latency, domain, name);
-
     } else if (type == "Ramulator") {
         string ramulatorConfig = config.get<const char*>("sys.mem.ramulatorConfig");
         bool pimMode = config.get<bool>("sim.pimMode", false);
@@ -400,46 +402,32 @@ CacheGroup* BuildCacheGroup(Config& config, const string& name, bool isTerminal)
     std::cout << "prefix: " << prefix << std::endl;
 
 
-
     uint32_t size = config.get<uint32_t>(prefix + "size", 64*1024);
     uint32_t banks = config.get<uint32_t>(prefix + "banks", 1);
     uint32_t caches = config.get<uint32_t>(prefix + "caches", 1);
 
-    assert(((banks > 0) && (size  > 0)));
+    cout << "Cache " << prefix << " has " << size << " (" << (size/(1024*1024)) << " MB \n";
 
-    uint64_t long_size = size;
-    if(prefix.find("l3")!=std::string::npos){
-        std::cout << "PREFIX IS L3 \n";
-        if (size < 1024*1024){
-            long_size*=(1024*1024); // I will divide the size to 1024 to fit into an integer
-            std::cout << "L3 Size: " << long_size << "\n";
-        }
-        else{
-            std::cout << "Size is " << size/(1024*1024) << "\n";
-        }
+    uint32_t bankSize = size/banks;
+    if (size % banks != 0) {
+        panic("%s: banks (%d) does not divide the size (%d bytes)", name.c_str(), banks, size);
     }
-    uint32_t bankSize = long_size/banks;
-
 
     bool isPrefetcher = config.get<bool>(prefix + "isPrefetcher", false);
     if (isPrefetcher) { //build a prefetcher group
         uint32_t prefetchers = config.get<uint32_t>(prefix + "prefetchers", 1);
         uint32_t entrySize = config.get<uint32_t>(prefix + "entries", 16);
         assert(entrySize > 0);
+
         cg.resize(prefetchers);
         for (vector<BaseCache*>& bg : cg) bg.resize(1);
         for (uint32_t i = 0; i < prefetchers; i++) {
             stringstream ss;
             ss << name << "-" << i;
             g_string pfName(ss.str().c_str());
-            cg[i][0] = new StreamPrefetcher(pfName, bankSize/zinfo->lineSize, entrySize);
+            cg[i][0] = new StreamPrefetcher(pfName,bankSize/zinfo->lineSize, entrySize);
         }
         return cgp;
-    }
-
-
-    if (long_size % banks != 0) {
-        panic("%s: banks (%d) does not divide the size (%d bytes)", name.c_str(), banks, size);
     }
 
     cg.resize(caches);
@@ -454,10 +442,11 @@ CacheGroup* BuildCacheGroup(Config& config, const string& name, bool isTerminal)
             }
             g_string bankName(ss.str().c_str());
             uint32_t domain = (i*banks + j)*zinfo->numDomains/(caches*banks); //(banks > 1)? nextDomain() : (i*banks + j)*zinfo->numDomains/(caches*banks);
+
             cg[i][j] = BuildCacheBank(config, prefix, bankName, bankSize, isTerminal, domain);
         }
-    }
 
+    }
     return cgp;
 }
 
@@ -476,8 +465,17 @@ static void InitSystem(Config& config) {
     };
 
     // If a network file is specified, build a Network
+    string networkType = config.get<const char*>("sys.networkType", "");
     string networkFile = config.get<const char*>("sys.networkFile", "");
-    Network* network = (networkFile != "")? new Network(networkFile.c_str()) : nullptr;
+    Network* network = nullptr;
+
+    if(networkType == "fixedDelay") {
+        network = new FixedDelayNetwork(networkFile.c_str());
+    }
+    else if(networkType == "mesh") {
+        network = new MeshNetworkMD1(networkFile.c_str());
+        network->initStats(zinfo->rootStat);
+    }
 
     // Build the caches
     vector<const char*> cacheGroupNames;
@@ -674,11 +672,15 @@ static void InitSystem(Config& config) {
                 TimingCore* timingCores;
                 OOOCore* oooCores;
                 NullCore* nullCores;
+                AcceleratorCore* acceleratorCores;
             };
             if (type == "Simple") {
                 simpleCores = gm_memalign<SimpleCore>(CACHE_LINE_BYTES, cores);
             } else if (type == "Timing") {
                 timingCores = gm_memalign<TimingCore>(CACHE_LINE_BYTES, cores);
+            } else if (type == "Accelerator") {
+                acceleratorCores = gm_memalign<AcceleratorCore>(CACHE_LINE_BYTES, cores);
+                zinfo->acceleratorDecode = true; //enable uop decoding, this is false by default, must be true if even one OOO cpu is in the system
             } else if (type == "OOO") {
                 oooCores = gm_memalign<OOOCore>(CACHE_LINE_BYTES, cores);
                 zinfo->oooDecode = true; //enable uop decoding, this is false by default, must be true if even one OOO cpu is in the system
@@ -731,7 +733,13 @@ static void InitSystem(Config& config) {
                         zinfo->eventRecorders[coreIdx] = tcore->getEventRecorder();
                         zinfo->eventRecorders[coreIdx]->setSourceId(coreIdx);
                         core = tcore;
-                    } else {
+                    } else if (type == "Accelerator") {
+                        uint32_t domain = j*zinfo->numDomains/cores;
+                        AcceleratorCore* acore = new (&acceleratorCores[j]) AcceleratorCore(ic, dc, domain, name);
+                        zinfo->eventRecorders[coreIdx] = acore->getEventRecorder();
+                        zinfo->eventRecorders[coreIdx]->setSourceId(coreIdx);
+                        core = acore;
+                      } else {
                         assert(type == "OOO");
                         OOOCore* ocore = new (&oooCores[j]) OOOCore(ic, dc, name);
                         zinfo->eventRecorders[coreIdx] = ocore->getEventRecorder();
@@ -806,7 +814,6 @@ static void InitSystem(Config& config) {
     }
 
     //Initialize event recorders
-    //for (uint32_t i = 0; i < zinfo->numCores; i++) eventRecorders[i] = new EventRecorder();
 
     AggregateStat* memStat = new AggregateStat(true);
     memStat->init("mem", "Memory controller stats");
@@ -840,32 +847,8 @@ static void PostInitStats(bool perProcessDir, Config& config) {
     const char* statsFile = gm_strdup((pathStr + application + ".zsim.out").c_str());
 
     if (zinfo->statsPhaseInterval) {
-/*        const char* periodicStatsFilter = config.get<const char*>("sim.periodicStatsFilter", "");
-		uint32_t periodicChunkSize = config.get<uint32_t>("sim.periodicStatsSize", 1 << 10 );
-        assert(periodicChunkSize > 0 );
-        AggregateStat* prStat = (!strlen(periodicStatsFilter))? zinfo->rootStat : FilterStats(zinfo->rootStat, periodicStatsFilter);
-        if (!prStat) panic("No stats match sim.periodicStatsFilter regex (%s)! Set interval to 0 to avoid periodic stats", periodicStatsFilter);
-        zinfo->periodicStatsBackend = new HDF5Backend(pStatsFile, prStat, periodicChunkSize , zinfo->skipStatsVectors, zinfo->compactPeriodicStats);
-        zinfo->periodicStatsBackend->dump(true); //must have a first sample
-
-        class PeriodicStatsDumpEvent : public Event {
-            public:
-                explicit PeriodicStatsDumpEvent(uint32_t period) : Event(period) {}
-                void callback() {
-                    zinfo->trigger = 10000;
-                    zinfo->periodicStatsBackend->dump(true buffered);
-                }
-        };
-
-        zinfo->eventQueue->insert(new PeriodicStatsDumpEvent(zinfo->statsPhaseInterval));
-        zinfo->statsBackends->push_back(zinfo->periodicStatsBackend);
-    } else {*/
         zinfo->periodicStatsBackend = nullptr;
     }
-
-    //zinfo->eventualStatsBackend = new HDF5Backend(evStatsFile, zinfo->rootStat, (1 << 17) /* 128KB chunks */, zinfo->skipStatsVectors, false /* don't sum regular aggregates*/);
-    //zinfo->eventualStatsBackend->dump(true); //must have a first sample
-    //zinfo->statsBackends->push_back(zinfo->eventualStatsBackend);
 
     if (zinfo->maxMinInstrs) {
         warn("maxMinInstrs IS DEPRECATED");
@@ -881,9 +864,7 @@ static void PostInitStats(bool perProcessDir, Config& config) {
     }
 
     // Convenience stats
-    //StatsBackend* compactStats = new HDF5Backend(cmpStatsFile, zinfo->rootStat, 0 /* no aggregation, this is just 1 record */, zinfo->skipStatsVectors, true); //don't dump a first sample.
     StatsBackend* textStats = new TextBackend(statsFile, zinfo->rootStat);
-    //zinfo->statsBackends->push_back(compactStats);
     zinfo->statsBackends->push_back(textStats);
 }
 
@@ -1068,7 +1049,9 @@ void SimInit(const char* configFile, const char* outputDir, uint32_t shmid) {
     string pathStr = zinfo->outputDir;
     pathStr += "/";
     string application  = config.get<const char*>("sim.stats");
-    //zinfo->application = application;
+    application_path = pathStr + application;
+
+   // zinfo->application = application;
     config.writeAndClose((pathStr + application + ".out.cfg").c_str(), strictConfig);
 
     zinfo->contentionSim->postInit();
@@ -1077,4 +1060,8 @@ void SimInit(const char* configFile, const char* outputDir, uint32_t shmid) {
 
     //Causes every other process to wake up
     gm_set_glob_ptr(zinfo);
+}
+
+std::string get_application_name(){
+    return application_path;
 }
