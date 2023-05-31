@@ -622,6 +622,37 @@ public:
       Request& req = packet.req;
       req.depart_hmc = clk;
       if (req.type == Request::Type::READ) {
+        ofstream myfile;
+        myfile.open ("zahra_read_latency_hmc_packet.txt", ios::app);
+        myfile << req.depart_hmc - req.arrive_hmc;
+        myfile << ", ";
+        myfile << req.depart - req.arrive;
+        myfile << ", ";
+        switch(int(req.type)){
+            case int(Request::Type::READ): myfile << "read"; break;
+            case int(Request::Type::WRITE): myfile << "write"; break;
+            case int(Request::Type::REFRESH): myfile << "refresh"; break;
+            case int(Request::Type::POWERDOWN) : myfile << "powerdown"; break;
+            case int(Request::Type::SELFREFRESH) : myfile << "selfrefresh"; break;
+            case int(Request::Type::EXTENSION): myfile << "extension"; break;
+            case int(Request::Type::MAX): myfile << "max"; break;
+        }
+        myfile << ", ";
+        myfile << req.addr;
+        myfile << ", ";
+        myfile << "HMC";
+        myfile << ", vault: " ,
+        myfile << req.addr_vec[int(HMC::Level::Vault)];
+        myfile << ", bank:"; 
+        myfile << req.addr_vec[int(HMC::Level::Bank)];
+        myfile << ", bankgroup";
+        myfile << req.addr_vec[int(HMC::Level::BankGroup)];
+        myfile << ", column:"; 
+        myfile << req.addr_vec[int(HMC::Level::Column)];
+        myfile << ", row:"; 
+        myfile << req.addr_vec[int(HMC::Level::Row)];
+        myfile << "\n";
+        myfile.close();
         read_latency_sum += req.depart_hmc - req.arrive_hmc;
         debug_hmc("read_latency: %ld", req.depart_hmc - req.arrive_hmc);
         request_packet_latency_sum += req.arrive - req.arrive_hmc;

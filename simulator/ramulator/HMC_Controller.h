@@ -695,9 +695,13 @@ public:
         if (pending.size()) {
           Request& req = pending[0];
           if (req.depart <= clk) {
+            ofstream myfile_check;
+            myfile_check.open ("zahra_hmc_check.txt", ios::app);
+            myfile_check << "less than 1 \n";
+            myfile_check.close();
             if (req.depart - req.arrive > 1) {
               channel->update_serving_requests(req.addr_vec.data(), -1, clk);
-              ofstream myfile;
+                ofstream myfile;
                 myfile.open ("zahra_read_latency_hmc.txt", ios::app);
                 myfile << req.depart_hmc - req.arrive_hmc;
                 myfile << ", ";
