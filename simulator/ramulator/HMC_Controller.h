@@ -8,7 +8,7 @@
 #include <list>
 #include <string>
 #include <vector>
-
+#include <unordered_map>
 #include "Controller.h"
 #include "Scheduler.h"
 
@@ -172,20 +172,24 @@ public:
         unsigned int max = 32; // TODO queue qize
         unsigned int size() {return q.size();}
         void update(){
-          for (auto& i : arrivel_q) {
-            i.hops -= 1;
-            if(i.hops <= 0){
-              q.push_back(i);
-            }
-          }
-
           list<Request> tmp;
-          for(auto& i : arrivel_q){
-            if(i.hops > 0){
-              tmp.push_back(i);
+          for (auto& i : arrivel_q) {
+            assert(i.hops <= MAX_HOP);
+            if(i.hops == 0){
+              q.push_back(i);
+              continue;
             }
+            i.hops -= 1;
+            tmp.push_back(i);
           }
           arrivel_q = tmp;
+        }
+        void arrive(Request& req) {
+            if(req.hops == 0) {
+                q.push_back(req);
+            } else {
+                arrivel_q.push_back(req);
+            }
         }
     };
 
@@ -193,6 +197,41 @@ public:
     Queue writeq;  // queue for write requests
     Queue otherq;  // queue for all "other" requests (e.g., refresh)
     Queue overflow;
+
+    struct PendingQueue {
+        deque<Request> q;
+        deque<Request> arrivel_q;
+        unsigned int size() {return q.size();}
+        void update(){
+          deque<Request> tmp;
+          for (auto& i : arrivel_q) {
+            assert(i.hops <= MAX_HOP);
+            if(i.hops == 0){
+              q.push_back(i);
+              continue;
+            }
+            i.hops -= 1;
+            tmp.push_back(i);
+          }
+          arrivel_q = tmp;
+        }
+        void arrive(Request& req) {
+            assert(req.hops <= MAX_HOP);
+            if(req.hops == 0) {
+                q.push_back(req);
+            } else {
+                arrivel_q.push_back(req);
+            }
+        }
+        void push_back(Request& req){
+            if(req.hops == 0) {
+                q.push_back(req);
+            } else {
+                arrivel_q.push_back(req);
+            }
+        }
+        void pop_front(){q.pop_front();}
+    };
 
     deque<Request> pending;  // read requests that are about to receive data from DRAM
     deque<Request> pending_write;  //write requests that are about to receive data from DRAM
@@ -216,7 +255,6 @@ public:
     deque<Packet> response_packets_buffer;
     map<long, Packet> incoming_packets_buffer;
     bool pim_mode_enabled = false;
-
 
     /* Constructor */
     Controller(const Config& configs, DRAM<HMC>* channel) :
@@ -637,11 +675,11 @@ public:
         }
 
         req.arrive = clk;
-        queue.arrivel_q.push_back(req);
+        queue.arrive(req);
         // shortcut for read requests, if a write to same addr exists
         // necessary for coherence
         if (req.type == Request::Type::READ && find_if(writeq.q.begin(), writeq.q.end(),
-                [req](Request& wreq){ return req.addr == wreq.addr;}) != writeq.q.end()){
+                [req](Request& wreq){ return req.addr == wreq.addr && req.coreid == wreq.coreid;}) != writeq.q.end()){
             req.depart = clk + 1;
             pending.push_back(req);
             readq.q.pop_back();
@@ -695,43 +733,8 @@ public:
         if (pending.size()) {
           Request& req = pending[0];
           if (req.depart <= clk) {
-            ofstream myfile_check;
-            myfile_check.open ("zahra_hmc_check.txt", ios::app);
-            myfile_check << "less than 1 \n";
-            myfile_check.close();
             if (req.depart - req.arrive > 1) {
               channel->update_serving_requests(req.addr_vec.data(), -1, clk);
-                ofstream myfile;
-                myfile.open ("zahra_read_latency_hmc.txt", ios::app);
-                myfile << req.depart_hmc - req.arrive_hmc;
-                myfile << ", ";
-                myfile << req.depart - req.arrive;
-                myfile << ", ";
-                switch(int(req.type)){
-                    case int(Request::Type::READ): myfile << "read"; break;
-                    case int(Request::Type::WRITE): myfile << "write"; break;
-                    case int(Request::Type::REFRESH): myfile << "refresh"; break;
-                    case int(Request::Type::POWERDOWN) : myfile << "powerdown"; break;
-                    case int(Request::Type::SELFREFRESH) : myfile << "selfrefresh"; break;
-                    case int(Request::Type::EXTENSION): myfile << "extension"; break;
-                    case int(Request::Type::MAX): myfile << "max"; break;
-                }
-                myfile << ", ";
-                myfile << req.addr;
-                myfile << ", ";
-                myfile << "HMC";
-                myfile << ", vault: " ,
-                myfile << req.addr_vec[int(HMC::Level::Vault)];
-                myfile << ", bank:"; 
-                myfile << req.addr_vec[int(HMC::Level::Bank)];
-                myfile << ", bankgroup";
-                myfile << req.addr_vec[int(HMC::Level::BankGroup)];
-                myfile << ", column:"; 
-                myfile << req.addr_vec[int(HMC::Level::Column)];
-                myfile << ", row:"; 
-                myfile << req.addr_vec[int(HMC::Level::Row)];
-                myfile << "\n";
-                myfile.close();
             }
 
             if(pim_mode_enabled){
@@ -827,8 +830,9 @@ public:
         issue_cmd(cmd, get_addr_vec(cmd, req));
 
         // check whether this is the last command (which finishes the request)
-        if (cmd != channel->spec->translate[int(req->type)])
+        if (cmd != channel->spec->translate[int(req->type)]){
             return;
+        }
 
         // set a future completion time for read requests
         if (req->type == Request::Type::READ) {
@@ -859,7 +863,7 @@ public:
         // remove request from queue
         if (req->burst_count == 0) {
           queue->q.erase(req);
-
+          
 
           /*if (queue->size() <= queue->max){
             if(overflow.size() > 0 && overflow.q.front().type == req->type){

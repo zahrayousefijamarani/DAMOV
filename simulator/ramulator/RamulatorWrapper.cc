@@ -27,7 +27,6 @@ static map<string, function<MemoryBase *(const Config&, int)> > name_to_func = {
     {"SALP-MASA", &MemoryFactory<SALP>::create},{"HMC", &MemoryFactory<HMC>::create},
 };
 
-//RamulatorWrapper::RamulatorWrapper(const char* config_path, unsigned num_cpus, int cacheline, bool pim_mode, string application_name, bool record_memory_trace)
 RamulatorWrapper::RamulatorWrapper(const char* config_path, unsigned num_cpus, int cacheline, bool pim_mode, bool record_memory_trace, const char* application_name, bool networkOverhead)
 {
 
@@ -58,30 +57,19 @@ RamulatorWrapper::~RamulatorWrapper() {
     delete mem;
 }
 
-void RamulatorWrapper::tick()
-{
+void RamulatorWrapper::tick() {
     mem->tick();
 }
 
-bool RamulatorWrapper::send(Request req)
-{
+bool RamulatorWrapper::send(Request req) {
     return mem->send(req);
 }
 
 void RamulatorWrapper::finish() {
   std::cout << "[RAMULATOR] Finished Ramulator" << std::endl;
-
-    mem->finish();
+  mem->finish();
 }
 
-double RamulatorWrapper::get_tCK(){
+double RamulatorWrapper::get_tCK() {
     return tCK;
 }
-
-/*void RamulatorWrapper::set_application_name(string _app){
-  mem->set_application_name(_app);
-}*/
-
-/*void RamulatorWrapper::set_address_recorder(){
-  mem->set_address_recorder();
-}*/

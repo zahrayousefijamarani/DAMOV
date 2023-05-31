@@ -8,6 +8,10 @@
 #include "Packet.h"
 #include "Statistics.h"
 #include <fstream>
+#include <vector>
+#include <array>
+#include <climits>
+#include <bitset>
 
 using namespace std;
 
@@ -84,17 +88,34 @@ protected:
 
   long mem_req_count = 0;
   bool num_cores;
+  int max_block_col_bits;
 public:
     long clk = 0;
     bool pim_mode_enabled = false;
     bool network_overhead = false;
 
+    static int calculate_hops_travelled(int src_vault, int dst_vault, int length) {
+      assert(src_vault >= 0);
+      assert(dst_vault >= 0);
+      assert(length >= 0);
+      int vault_destination_x = dst_vault/NETWORK_WIDTH;
+      int vault_destination_y = dst_vault%NETWORK_WIDTH;
+
+      int vault_origin_x = src_vault/NETWORK_HEIGHT;
+      int vault_origin_y = src_vault%NETWORK_HEIGHT;
+
+      int hops = abs(vault_destination_x - vault_origin_x) + abs(vault_destination_y - vault_origin_y);
+      hops = hops*length;
+      assert(hops <= MAX_HOP);
+      return hops;
+    }
+
     void set_address_recorder (){
       get_memory_addresses = false;
-    /*  string to_open = application_name + ".memory_addresses";
+      string to_open = application_name + ".memory_addresses";
       std::cout << "Recording memory trace at " << to_open << "\n";
       memory_addresses.open(to_open.c_str(), std::ofstream::out);
-      memory_addresses << "CLK ADDR W|R Vault BankGroup Bank Row Column \n";*/
+      memory_addresses << "CLK ADDR W|R Vault BankGroup Bank Row Column \n";
     }
 
     void set_application_name(string _app){
@@ -134,6 +155,236 @@ public:
     vector<LogicLayer<HMC>*> logic_layers;
     HMC * spec;
 
+    enum SubscriptionPrefetcherType {
+      None, // Baseline configuration (no prefetching)
+      Swap, // Swap with remote vault's same address
+      Allocate, // Allocate from local vault's reserved address. To be implemented
+      Copy // Copy to local vault's reserved address. To be implemented
+    } subscription_prefetcher_type = SubscriptionPrefetcherType::None;
+
+    std::map<string, SubscriptionPrefetcherType> name_to_prefetcher_type = {
+      {"None", SubscriptionPrefetcherType::None},
+      {"Swap", SubscriptionPrefetcherType::Swap},
+    };
+
+    // A subscription based prefetcher
+    template <typename TableType>
+    class SubscriptionPrefetcherSet {
+    private:
+      static const size_t COUNTER_TABLE_SIZE = 1024;
+      static const size_t SUBSCRIPTION_TABLE_SIZE = 131072;
+      static const size_t SUBSCRIPTION_BUFFER_SIZE = SIZE_MAX; // TODO: Actually find a reasonable buffer size
+      static const int COUNTER_BITS = 8;
+      static const int TAG_BITS = 24;
+      int subscription_table_ways = SUBSCRIPTION_TABLE_SIZE;
+      TableType prefetch_hops_threshold = 5;
+      TableType prefetch_count_threshold = 1;
+      vector<array<TableType, COUNTER_TABLE_SIZE>> count_tables;
+      Memory<HMC, Controller>* mem_ptr;
+      struct SubscriptionTableEntry {
+        int vault;
+        long last_accessed;
+        SubscriptionTableEntry(int vault, long last_accessed):vault(vault),last_accessed(last_accessed){}
+        SubscriptionTableEntry():vault(-1),last_accessed(0){} // Default constructor. Otherwise map will have weird error
+      };
+      // TODO: Decrease the associativity of this table
+      // TODO (To be confirmed): Split this table by each core
+      map<long, SubscriptionTableEntry> address_translation_table; // Subscribe remote address (1st val) to local address (2nd address)
+      struct SubscriptionTask {
+        long addr;
+        int req_vault;
+        int hops;
+        SubscriptionTask(long addr, int req_vault, int hops):addr(addr),req_vault(req_vault),hops(hops){}
+      };
+      list<SubscriptionTask> pending_subscription; // Tasks in pending_subscription and pending_unsubscription are being communicated via the network
+      list<SubscriptionTask> pending_unsubscription;
+      list<SubscriptionTask> subscription_buffer; // To be used when the subscription table is "full". Tasks in this queue is actually at its destination
+    public:
+      SubscriptionPrefetcherSet(int controllers, Memory<HMC, Controller>* mem_ptr):mem_ptr(mem_ptr) {
+        array<TableType, COUNTER_TABLE_SIZE> zero_array;
+        std::fill(std::begin(zero_array), std::end(zero_array), 0);
+        count_tables.assign(controllers, zero_array);
+      }
+      int get_counter_table_size() const {return COUNTER_TABLE_SIZE;}
+      bool subscription_table_is_free(long addr) const {return address_translation_table.size() < SUBSCRIPTION_TABLE_SIZE;}
+      bool subscription_buffer_is_free(long addr) const {return subscription_buffer.size() < SUBSCRIPTION_BUFFER_SIZE;}
+      long find_victim_for_unsubscription(long addr) const {
+        long earliest_access = mem_ptr -> clk + 1; // Use one cycle in the future as the initial access timestamp to start
+        long victim = 0;
+        for(auto const& i : address_translation_table) {
+          if(i.second.last_accessed <= earliest_access) {
+            victim = i.first;
+          }
+        }
+        return victim;
+      }
+      void set_prefetch_hops_threshold(int threshold) {
+        prefetch_hops_threshold = threshold;
+        cout << "Prefetcher hops threshold: " << prefetch_hops_threshold << endl;
+      }
+      void set_prefetch_count_threshold(int threshold) {
+        prefetch_count_threshold = threshold;
+        cout << "Prefetcher count threshold: " << prefetch_count_threshold << endl;
+      }
+      bool check_prefetch(TableType hops, TableType count) const {
+        // TODO: Implment a good prefetch policy
+        return hops >= prefetch_hops_threshold && count >= prefetch_count_threshold;
+      }
+      void immediate_unsubscribe_address(long addr) { // unless otherwise specifiedd, "addr" in arguments below are preprocessed addresses
+        address_translation_table.erase(addr);
+      }
+      void immediate_subscribe_address(long addr, int vault) {
+        // cout << "Actually ubscribing address Vault " << addr_vec[int(HMC::Level::Vault)] << " BankGroup " << addr_vec[int(HMC::Level::BankGroup)]
+        //     << " Bank " << addr_vec[int(HMC::Level::Bank)] << " Row " << addr_vec[int(HMC::Level::Row)] << " Column " << addr_vec[int(HMC::Level::Column)]
+        //     << " to Vault " << vault << endl;
+        immediate_unsubscribe_address(addr); // Unscribe first to make sure we're not having any issues
+        address_translation_table[addr] = SubscriptionTableEntry(vault, mem_ptr -> clk); // Subscribe the remote vault to local vault
+      }
+      void unsubscribe_address(long addr) {
+        if(address_translation_table.count(addr) == 0) {
+            return; // If there is no local record, do nothing.
+        }
+        vector<int> addr_vec = mem_ptr -> address_to_address_vector(addr);
+        int hops = calculate_hops_travelled(addr_vec[int(HMC::Level::Vault)], address_translation_table[addr].vault, WRITE_LENGTH);
+        vector<int> victim_vec(addr_vec);
+        victim_vec[int(HMC::Level::Vault)] = address_translation_table[addr].vault; // We find the original page to swap back
+        long victim_addr = mem_ptr -> address_vector_to_address(victim_vec);
+        submit_unsubscription(addr, address_translation_table[addr].vault, hops);
+        if(address_translation_table.count(victim_addr) != 0) {
+            submit_unsubscription(victim_addr, address_translation_table[victim_addr].vault, hops);
+        }
+      }
+      void subscribe_address(long addr, int req_vault, int val_vault) {
+        int hops = calculate_hops_travelled(req_vault, val_vault, READ_LENGTH);
+        // cout << "Queuing address Vault " << addr_vec[int(HMC::Level::Vault)] << " BankGroup " << addr_vec[int(HMC::Level::BankGroup)]
+        //   << " Bank " << addr_vec[int(HMC::Level::Bank)] << " Row " << addr_vec[int(HMC::Level::Row)] << " Column " << addr_vec[int(HMC::Level::Column)]
+        //   << " From Vault " << val_vault << " to Vault for subscribe " << req_vault << " it will take effect in " << hops << " cycles" << endl;
+        vector<int> addr_vec = mem_ptr -> address_to_address_vector(addr);
+        vector<int> victim_vec(addr_vec);
+        victim_vec[int(HMC::Level::Vault)] = req_vault; // We are locating the page in the local vault's same row & column for swapping with the remote vault
+        long victim_addr = mem_ptr -> address_vector_to_address(victim_vec);
+        submit_subscription(addr, req_vault, hops); // Submit to wait for given number of cycles
+        submit_subscription(victim_addr, val_vault, hops);
+      }
+      void submit_subscription(long addr, int mapped_vault, int hops) {
+        SubscriptionTask task(addr, mapped_vault, hops);
+        pending_subscription.push_back(task);
+      }
+      void submit_unsubscription(long addr, int mapped_vault, int hops) {
+        SubscriptionTask task(addr, mapped_vault, hops);
+        pending_unsubscription.push_back(task);
+      }
+      void tick() {
+        // First, we check if there is any subscription buffer in pending (i.e. arrived but cannot be subscribed due to subscription table space constraints)
+        list<SubscriptionTask> new_subscription_buffer;
+        for (auto& i : subscription_buffer) {
+          if(subscription_table_is_free(i.addr)) {
+            cout << "We have something in the buffer and the subscription table is free. Inserting " << i.addr << " into the table..." << endl;
+            immediate_subscribe_address(i.addr, i.req_vault);
+          } else {
+            new_subscription_buffer.push_back(i);
+          }
+        }
+        subscription_buffer = new_subscription_buffer;
+
+        // Then, we process the transfer of subscription requests in the network
+        list<SubscriptionTask> new_pending_subscription;
+        for (auto& i : pending_subscription) {
+          if(i.hops == 0){
+            if(subscription_table_is_free(i.addr)) {
+              immediate_subscribe_address(i.addr, i.req_vault);
+            } else {
+              // if the subscription is full when the request arrives, we try to free up a subscription table entry
+              cout << "Subscription table is full. Trying to unsubscribe to make space..." << endl;
+              long victim_addr = find_victim_for_unsubscription(i.addr);
+              cout << "We pick " << i.addr << " to evict from the table." << endl;
+              unsubscribe_address(victim_addr);
+              // But the unsubscription won't take effect instantly, so we have to put the subscription request in a buffer and wait
+              // If the buffer is even full, we do nothing further (and there is nothing we can do)
+              if(subscription_buffer_is_free(i.addr)) {
+                subscription_buffer.push_back(i);
+              }
+            }
+            continue;
+          } // Safety Check
+
+          i.hops -= 1;
+          new_pending_subscription.push_back(i);
+        }
+        pending_subscription = new_pending_subscription;
+
+        // Last, we process the pending unsubscription requests in the network
+        list<SubscriptionTask> new_pending_unsubscription;
+        for (auto& i : pending_unsubscription) {
+          if(i.hops == 0){
+            immediate_unsubscribe_address(i.addr);
+            continue;
+          } // Safety Check
+
+          i.hops -= 1;
+          new_pending_unsubscription.push_back(i);
+        }
+        pending_unsubscription = new_pending_unsubscription;
+      }
+      int find_vault(long addr, int original_vault) {
+        if(address_translation_table.count(addr)) {
+          return address_translation_table[addr].vault;
+        }
+        return original_vault;
+      }
+      void pre_process_addr(long& addr) {
+        mem_ptr -> clear_lower_bits(addr, mem_ptr -> tx_bits + 1);
+      }
+      void translate_address(Request& req) {
+        long addr = req.addr;
+        pre_process_addr(addr);
+        if(address_translation_table.count(addr)) {
+          req.addr_vec[int(HMC::Level::Vault)] = address_translation_table[addr].vault;
+          address_translation_table[addr].last_accessed = mem_ptr -> clk;
+        }
+      }
+
+      void update_counter_table(const Request& req) {
+        long addr = req.addr;
+        pre_process_addr(addr);
+        int req_vault_id = req.coreid;
+        long table_index = addr % COUNTER_TABLE_SIZE; // 64 bits per flip, and we prefetch by flip
+        TableType table_entry = count_tables[req_vault_id][table_index]; // Requesting core is in charge of keeping track
+        TableType tag = 0;
+        long temp_addr = addr;
+        while (temp_addr != 0) {
+          tag ^= temp_addr;
+          temp_addr = temp_addr >> TAG_BITS;
+        }
+        tag = (tag << (COUNTER_BITS)) >> (COUNTER_BITS);
+
+        TableType count;
+        TableType old_tag = (table_entry >> (COUNTER_BITS));
+        if(old_tag != tag) {
+          count = 0; // If tag does not match, the address is not the same and we start from the scratch
+          // cout << "A prefetch table replacement happening at index: " << table_index << " and vault " << req.addr_vec[int(HMC::Level::Vault)] <<
+          //     " The old tag is " << old_tag << " the new tag is " << tag << endl;
+        } else {
+          // cout << "No replacement is happening as the old tag is the same as the new tag! Index: " << table_index << " vault: " << req.addr_vec[int(HMC::Level::Vault)] << " old tag: " <<
+          //     old_tag << " new tag: " << tag << endl;   
+          count = (table_entry << TAG_BITS >>  TAG_BITS);
+          count++;
+        }
+        if(count >= ((TableType)1 << COUNTER_BITS)) {
+          count = ((TableType)1 << COUNTER_BITS) - 1;
+        }
+        int val_vault_id = find_vault(addr, req.addr_vec[int(HMC::Level::Vault)]);
+        TableType hops = calculate_hops_travelled(req_vault_id, val_vault_id, OTHER_LENGTH);
+        count_tables[req_vault_id][table_index] = (tag << (COUNTER_BITS)) | count;
+        if(check_prefetch(hops, count)) {
+          // cout << "[RAMULATOR] Subscribing memory from vault " << req.addr_vec[int(HMC::Level::Vault)] << " to core " << req.coreid << ". Inserted in index " << table_index << endl;
+          subscribe_address(addr, req_vault_id, val_vault_id);
+        }
+      }
+    };
+    
+    SubscriptionPrefetcherSet<uint32_t> prefetcher_set;
+
     vector<int> addr_bits;
     vector<vector <int> > address_distribution;
 
@@ -142,7 +393,8 @@ public:
     Memory(const Config& configs, vector<Controller<HMC>*> ctrls)
         : ctrls(ctrls),
           spec(ctrls[0]->channel->spec),
-          addr_bits(int(HMC::Level::MAX))
+          addr_bits(int(HMC::Level::MAX)),
+          prefetcher_set(ctrls.size(), this)
     {
         // make sure 2^N channels/ranks
         // TODO support channel number that is not powers of 2
@@ -202,8 +454,11 @@ public:
                               std::placeholders::_1)));
         }
 
+        cout << "Request type = "<< int(Request::Type::READ) << " is a read \n";
+        cout << "Request type = " << int(Request::Type::WRITE) << " is a write \n";
+
         num_cores = configs.get_core_num();
-        /*cout << "Number of cores in HMC Memory: " << configs.get_core_num() << endl;
+        cout << "Number of cores in HMC Memory: " << configs.get_core_num() << endl;
         address_distribution.resize(configs.get_core_num());
         for(int i=0; i < configs.get_core_num(); i++){
             //up to 32 vaults
@@ -211,13 +466,27 @@ public:
             for(int j=0; j < 32; j++){
                 address_distribution[i][j] = 0;
             }
-        }*/
+        }
 
         this -> set_application_name(configs.get_application_name());
         if(configs.get_record_memory_trace()){
           this -> set_address_recorder();
         }
 
+        if (configs.contains("subscription_prefetcher")) {
+          cout << "Using prefetcher: " << configs["subscription_prefetcher"] << endl;
+          subscription_prefetcher_type = name_to_prefetcher_type[configs["subscription_prefetcher"]];
+        }
+
+        if (configs.contains("prefetcher_count_threshold")) {
+          prefetcher_set.set_prefetch_count_threshold(stoi(configs["prefetcher_count_threshold"]));
+        }
+
+        if (configs.contains("prefetcher_hops_threshold")) {
+          prefetcher_set.set_prefetch_hops_threshold(stoi(configs["prefetcher_hops_threshold"]));
+        }
+        max_block_col_bits = spec->maxblock_entry.flit_num_bits - tx_bits;
+        cout << "maxblock_entry.flit_num_bits: " << spec->maxblock_entry.flit_num_bits << " tx_bits: " << tx_bits << " max_block_col_bits: " << max_block_col_bits << endl;
 
         // regStats
         dram_capacity
@@ -557,6 +826,9 @@ public:
         for (auto logic_layer : logic_layers) {
           logic_layer->tick();
         }
+        if (subscription_prefetcher_type != SubscriptionPrefetcherType::None) {
+          prefetcher_set.tick();
+        }
     }
 
     int assign_tag(int slid) {
@@ -594,7 +866,7 @@ public:
       }
       Packet packet(Packet::Type::REQUEST, cub, adrs, tag, lng, slid, cmd);
       packet.req = req;
-
+      
       //cout << "Forming a packet to send to memory \n";
       //cout << "ADDR: " << packet.header.ADRS.value << " CUB " << packet.header.CUB.value << " SLID " << packet.tail.SLID.value << " TAG " << packet.header.TAG.value << " LNG " << lng << endl;
 
@@ -617,163 +889,213 @@ public:
       if (packet.flow_control) {
         return;
       }
+
       assert(packet.type == Packet::Type::RESPONSE);
+
       tags_pools[packet.header.SLID.value].push_back(packet.header.TAG.value);
       Request& req = packet.req;
       req.depart_hmc = clk;
       if (req.type == Request::Type::READ) {
-        ofstream myfile;
-        myfile.open ("zahra_read_latency_hmc_packet.txt", ios::app);
-        myfile << req.depart_hmc - req.arrive_hmc;
-        myfile << ", ";
-        myfile << req.depart - req.arrive;
-        myfile << ", ";
-        switch(int(req.type)){
-            case int(Request::Type::READ): myfile << "read"; break;
-            case int(Request::Type::WRITE): myfile << "write"; break;
-            case int(Request::Type::REFRESH): myfile << "refresh"; break;
-            case int(Request::Type::POWERDOWN) : myfile << "powerdown"; break;
-            case int(Request::Type::SELFREFRESH) : myfile << "selfrefresh"; break;
-            case int(Request::Type::EXTENSION): myfile << "extension"; break;
-            case int(Request::Type::MAX): myfile << "max"; break;
-        }
-        myfile << ", ";
-        myfile << req.addr;
-        myfile << ", ";
-        myfile << "HMC";
-        myfile << ", vault: " ,
-        myfile << req.addr_vec[int(HMC::Level::Vault)];
-        myfile << ", bank:"; 
-        myfile << req.addr_vec[int(HMC::Level::Bank)];
-        myfile << ", bankgroup";
-        myfile << req.addr_vec[int(HMC::Level::BankGroup)];
-        myfile << ", column:"; 
-        myfile << req.addr_vec[int(HMC::Level::Column)];
-        myfile << ", row:"; 
-        myfile << req.addr_vec[int(HMC::Level::Row)];
-        myfile << "\n";
-        myfile.close();
         read_latency_sum += req.depart_hmc - req.arrive_hmc;
         debug_hmc("read_latency: %ld", req.depart_hmc - req.arrive_hmc);
         request_packet_latency_sum += req.arrive - req.arrive_hmc;
         debug_hmc("request_packet_latency: %ld", req.arrive - req.arrive_hmc);
         response_packet_latency_sum += req.depart_hmc - req.depart;
         debug_hmc("response_packet_latency: %ld", req.depart_hmc - req.depart);
+
         req.callback(req);
+
+
       }
       else if(req.type == Request::Type::WRITE){
-        //TODO: Include write stats
         req.callback(req);
       }
     }
 
-    bool send(Request req)
-    {
-      //  cout << "receive request packets@host controller with address " << req.addr << endl;
-        req.addr_vec.resize(addr_bits.size());
-        req.reqid = mem_req_count;
+    long address_vector_to_address(const vector<int>& addr_vec) {
+      long addr = 0;
+      long vault = addr_vec[int(HMC::Level::Vault)];
+      long bank_group = addr_vec[int(HMC::Level::BankGroup)];
+      long bank = addr_vec[int(HMC::Level::Bank)];
+      long row = addr_vec[int(HMC::Level::Row)];
+      long column = addr_vec[int(HMC::Level::Column)];
+      // cout << "Address Vector is in Vault " << addr_vec[int(HMC::Level::Vault)] << " BankGroup " << addr_vec[int(HMC::Level::BankGroup)]
+      //   << " Bank " << addr_vec[int(HMC::Level::Bank)] << " Row " << addr_vec[int(HMC::Level::Row)] << " Column " << addr_vec[int(HMC::Level::Column)];
+      int column_significant_bits = addr_bits[int(HMC::Level::Column)] - max_block_col_bits;
+      switch(int(type)) {
+        case int(Type::RoCoBaVa): {
+          addr |= row;
+          addr <<= column_significant_bits;
+          addr |= (column >> max_block_col_bits);
+          addr <<= addr_bits[int(HMC::Level::BankGroup)];
+          addr |= bank_group;
+          addr <<= addr_bits[int(HMC::Level::Bank)];
+          addr |= bank;
+          addr <<= addr_bits[int(HMC::Level::Vault)];
+          addr |= vault;
+          addr <<= max_block_col_bits;
+          addr |= column & ((1<<max_block_col_bits) - 1);
+        }
+        break;
+        case int(Type::RoBaCoVa): {
+          addr |= row;
+          addr <<= addr_bits[int(HMC::Level::BankGroup)];
+          addr |= bank_group;
+          addr <<= addr_bits[int(HMC::Level::Bank)];
+          addr |= bank;
+          addr <<= column_significant_bits;
+          addr |= (column >> max_block_col_bits);
+          addr <<= addr_bits[int(HMC::Level::Vault)];
+          addr |= vault;
+          addr <<= max_block_col_bits;
+          addr |= column & ((1<<max_block_col_bits) - 1);
+        }
+        break;
+        case int(Type::RoCoBaBgVa): {
+          addr |= row;
+          addr <<= column_significant_bits;
+          addr |= (column >> max_block_col_bits);
+          addr <<= addr_bits[int(HMC::Level::Bank)];
+          addr |= bank;
+          addr <<= addr_bits[int(HMC::Level::BankGroup)];
+          addr |= bank_group;
+          addr <<= addr_bits[int(HMC::Level::Vault)];
+          addr |= vault;
+          addr <<= max_block_col_bits;
+          addr |= column & ((1<<max_block_col_bits) - 1);
+        }
+        break;
+        default:
+            assert(false);
+      }
+      // cout << " and after translation, the original address is: " << addr << endl;
+      return addr;
+    }
 
-
-        clear_higher_bits(req.addr, max_address-1ll);
-        long addr = req.addr;
-        long coreid = req.coreid;
-
-        // Each transaction size is 2^tx_bits, so first clear the lowest tx_bits bits
-        clear_lower_bits(addr, tx_bits);
-
-        switch(int(type)) {
+    vector<int> address_to_address_vector(const long& addr) {
+      long local_addr = addr;
+      // cout << "The input address is " << addr;
+      vector<int> addr_vec;
+      addr_vec.resize(addr_bits.size());
+      switch(int(type)) {
           case int(Type::RoCoBaVa): {
-            int max_block_col_bits =
-                spec->maxblock_entry.flit_num_bits - tx_bits;
-            req.addr_vec[int(HMC::Level::Column)] =
-                slice_lower_bits(addr, max_block_col_bits);
-            req.addr_vec[int(HMC::Level::Vault)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::Vault)]);
-            req.addr_vec[int(HMC::Level::Bank)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::Bank)]);
-            req.addr_vec[int(HMC::Level::BankGroup)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::BankGroup)]);
+            addr_vec[int(HMC::Level::Column)] =
+                slice_lower_bits(local_addr, max_block_col_bits);
+            addr_vec[int(HMC::Level::Vault)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::Vault)]);
+            addr_vec[int(HMC::Level::Bank)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::Bank)]);
+            addr_vec[int(HMC::Level::BankGroup)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::BankGroup)]);
             int column_MSB_bits =
               slice_lower_bits(
-                  addr, addr_bits[int(HMC::Level::Column)] - max_block_col_bits);
-            req.addr_vec[int(HMC::Level::Column)] =
-              req.addr_vec[int(HMC::Level::Column)] | (column_MSB_bits << max_block_col_bits);
-            req.addr_vec[int(HMC::Level::Row)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::Row)]);
+                  local_addr, addr_bits[int(HMC::Level::Column)] - max_block_col_bits);
+            addr_vec[int(HMC::Level::Column)] =
+              addr_vec[int(HMC::Level::Column)] | (column_MSB_bits << max_block_col_bits);
+            addr_vec[int(HMC::Level::Row)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::Row)]);
           }
           break;
           case int(Type::RoBaCoVa): {
-            int max_block_col_bits =
-                spec->maxblock_entry.flit_num_bits - tx_bits;
-            req.addr_vec[int(HMC::Level::Column)] =
-                slice_lower_bits(addr, max_block_col_bits);
-            req.addr_vec[int(HMC::Level::Vault)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::Vault)]);
+            addr_vec[int(HMC::Level::Column)] =
+                slice_lower_bits(local_addr, max_block_col_bits);
+            addr_vec[int(HMC::Level::Vault)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::Vault)]);
             int column_MSB_bits =
               slice_lower_bits(
-                  addr, addr_bits[int(HMC::Level::Column)] - max_block_col_bits);
-            req.addr_vec[int(HMC::Level::Column)] =
-              req.addr_vec[int(HMC::Level::Column)] | (column_MSB_bits << max_block_col_bits);
-            req.addr_vec[int(HMC::Level::Bank)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::Bank)]);
-            req.addr_vec[int(HMC::Level::BankGroup)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::BankGroup)]);
-            req.addr_vec[int(HMC::Level::Row)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::Row)]);
+                  local_addr, addr_bits[int(HMC::Level::Column)] - max_block_col_bits);
+            addr_vec[int(HMC::Level::Column)] =
+              addr_vec[int(HMC::Level::Column)] | (column_MSB_bits << max_block_col_bits);
+            addr_vec[int(HMC::Level::Bank)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::Bank)]);
+            addr_vec[int(HMC::Level::BankGroup)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::BankGroup)]);
+            addr_vec[int(HMC::Level::Row)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::Row)]);
           }
           break;
           case int(Type::RoCoBaBgVa): {
-            int max_block_col_bits =
-                spec->maxblock_entry.flit_num_bits - tx_bits;
-            req.addr_vec[int(HMC::Level::Column)] =
-                slice_lower_bits(addr, max_block_col_bits);
-            req.addr_vec[int(HMC::Level::Vault)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::Vault)]);
-            req.addr_vec[int(HMC::Level::BankGroup)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::BankGroup)]);
-            req.addr_vec[int(HMC::Level::Bank)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::Bank)]);
+            addr_vec[int(HMC::Level::Column)] =
+                slice_lower_bits(local_addr, max_block_col_bits);
+            addr_vec[int(HMC::Level::Vault)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::Vault)]);
+            addr_vec[int(HMC::Level::BankGroup)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::BankGroup)]);
+            addr_vec[int(HMC::Level::Bank)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::Bank)]);
             int column_MSB_bits =
               slice_lower_bits(
-                  addr, addr_bits[int(HMC::Level::Column)] - max_block_col_bits);
-            req.addr_vec[int(HMC::Level::Column)] =
-              req.addr_vec[int(HMC::Level::Column)] | (column_MSB_bits << max_block_col_bits);
-            req.addr_vec[int(HMC::Level::Row)] =
-                slice_lower_bits(addr, addr_bits[int(HMC::Level::Row)]);
+                  local_addr, addr_bits[int(HMC::Level::Column)] - max_block_col_bits);
+            addr_vec[int(HMC::Level::Column)] =
+              addr_vec[int(HMC::Level::Column)] | (column_MSB_bits << max_block_col_bits);
+            addr_vec[int(HMC::Level::Row)] =
+                slice_lower_bits(local_addr, addr_bits[int(HMC::Level::Row)]);
           }
           break;
           default:
               assert(false);
         }
+        // cout << " And after translation, it is in Vault " << addr_vec[int(HMC::Level::Vault)] << " BankGroup " << addr_vec[int(HMC::Level::BankGroup)]
+        //     << " Bank " << addr_vec[int(HMC::Level::Bank)] << " Row " << addr_vec[int(HMC::Level::Row)] << " Column " << addr_vec[int(HMC::Level::Column)] << endl;
+        return addr_vec;
+    }
+
+    bool send(Request req)
+    {
+      //  cout << "receive request packets@host controller with address " << req.addr << endl;
+        req._addr = req.addr;
+        req.reqid = mem_req_count;
+
+        // cout << "Address before bit operation is " << bitset<64>(req.addr) << endl;
+        clear_higher_bits(req.addr, max_address-1ll);
+        // cout << "Address after clear higher bits is" << bitset<64>(req.addr) << endl;
+        long addr = req.addr;
+        long coreid = req.coreid;
+
+        // Each transaction size is 2^tx_bits, so first clear the lowest tx_bits bits
+        clear_lower_bits(addr, tx_bits);
+        // cout << "Address after clear lower bits is " << bitset<64>(addr) << endl;
+        vector<int> addr_vec = address_to_address_vector(addr);
+        assert(address_vector_to_address(addr_vec) == addr); // Test script to make sure the implementation is correct.
+        req.addr_vec = addr_vec;
+
+
+        if (subscription_prefetcher_type != SubscriptionPrefetcherType::None) {
+          prefetcher_set.translate_address(req);
+        }
+
 
         req.arrive_hmc = clk;
 
         if(pim_mode_enabled){
             // To model NOC traffic
-
             //I'm considering 32 vaults. So the 2D mesh will be 36x36
             //To calculate how many hops, check the manhattan distance
-            int vault_destination_x = req.addr_vec[int(HMC::Level::Vault)]/6;
-            int vault_destination_y = req.addr_vec[int(HMC::Level::Vault)]%6;
+            int destination_vault = req.addr_vec[int(HMC::Level::Vault)];
 
-            int vault_origin_x = req.coreid/6;
-            int vault_origin_y = req.coreid%6;
-
-            int hops = abs(vault_destination_x - vault_origin_x) + abs(vault_destination_y - vault_origin_y);
-            if(!network_overhead) hops = 0;
-            if (req.type == Request::Type::READ){
+            int origin_vault = req.coreid;
+            int hops;
+            if(!network_overhead) {
+              hops = 0;
+            }
+            else if (req.type == Request::Type::READ){
               // Let's assume 1 Flit = 128 bytes
               // A read request is 64 bytes
               // One read request will take = 1 Flit*hops + 5*hops
-              hops = hops*6;
+              hops = calculate_hops_travelled(origin_vault, destination_vault, READ_LENGTH);
             }
             else if (req.type == Request::Type::WRITE){
-              hops = hops*5;
+              hops = calculate_hops_travelled(origin_vault, destination_vault, WRITE_LENGTH);
+            } else {
+              hops = calculate_hops_travelled(origin_vault, destination_vault, OTHER_LENGTH);
             }
             req.hops = hops;
 
             if(!ctrls[req.addr_vec[int(HMC::Level::Vault)]] -> receive(req)){
               return false;
+            }
+            if (subscription_prefetcher_type != SubscriptionPrefetcherType::None) {
+              prefetcher_set.update_counter_table(req);
             }
 
             if (req.type == Request::Type::READ) {
@@ -786,12 +1108,12 @@ public:
             ++incoming_requests_per_channel[req.addr_vec[int(HMC::Level::Vault)]];
             ++mem_req_count;
 
-            /*if(req.coreid >= 0 && req.coreid < 256)
+            if(req.coreid >= 0 && req.coreid < 256)
               address_distribution[req.coreid][req.addr_vec[int(HMC::Level::Vault)]]++;
             else
-              cerr << "HMC MEMORY: INVALID CORE ID: " << req.coreid << "endl";*/
+              cerr << "HMC MEMORY: INVALID CORE ID: " << req.coreid << "endl";
 
-            /*if(get_memory_addresses){
+            if(get_memory_addresses){
               if (profile_this_epoach){
                 memory_addresses << clk << " " << req.addr << " ";
                 if (req.type == Request::Type::WRITE)       memory_addresses << "W ";
@@ -814,16 +1136,15 @@ public:
                   instruction_counter = 0;
                 }
               }
-            }*/
+            }
 
-            /*memory_addresses << clk << " " << req.addr << " ";
+            memory_addresses << clk << " " << req.addr << " ";
             if (req.type == Request::Type::WRITE)       memory_addresses << "W ";
             else if (req.type == Request::Type::READ)   memory_addresses << "R ";
             else                                        memory_addresses << "NA ";
             memory_addresses << req.addr_vec[int(HMC::Level::Vault)] << " " << req.addr_vec[int(HMC::Level::BankGroup)] << " "
                              << req.addr_vec[int(HMC::Level::Bank)] << " "  << req.addr_vec[int(HMC::Level::Row)]       << " "
                              << req.addr_vec[int(HMC::Level::Column)] << "\n";
-            */
 
             return true;
         }
@@ -848,10 +1169,10 @@ public:
               ++incoming_requests_per_channel[req.addr_vec[int(HMC::Level::Vault)]];
               ++mem_req_count;
 
-              /*if(req.coreid >= 0 && req.coreid < 256)
+              if(req.coreid >= 0 && req.coreid < 256)
                 address_distribution[req.coreid][req.addr_vec[int(HMC::Level::Vault)]]++;
               else
-                cerr << "HMC MEMORY: INVALID CORE ID: " << req.coreid << "endl";*/
+                cerr << "HMC MEMORY: INVALID CORE ID: " << req.coreid << "endl";
               return true;
             }
             else {
@@ -859,7 +1180,7 @@ public:
             }
         }
 
-        /*if(get_memory_addresses){
+        if(get_memory_addresses){
           cout << "Get memory address \n";
           if (profile_this_epoach){
 
@@ -884,16 +1205,15 @@ public:
               instruction_counter = 0;
             }
           }
-        }*/
+        }
 
-      /*  memory_addresses << clk << " " << req.addr << " ";
+        memory_addresses << clk << " " << req.addr << " ";
         if (req.type == Request::Type::WRITE)       memory_addresses << "W ";
         else if (req.type == Request::Type::READ)   memory_addresses << "R ";
         else                                        memory_addresses << "NA ";
         memory_addresses << req.addr_vec[int(HMC::Level::Vault)] << " " << req.addr_vec[int(HMC::Level::BankGroup)] << " "
                          << req.addr_vec[int(HMC::Level::Bank)] << " "  << req.addr_vec[int(HMC::Level::Row)]       << " "
                          << req.addr_vec[int(HMC::Level::Column)] << "\n";
-        */
         return true;
     }
 
@@ -934,7 +1254,7 @@ public:
       read_req_queue_length_avg = read_req_queue_length_sum.value() / dram_cycles;
       write_req_queue_length_avg = write_req_queue_length_sum.value() / dram_cycles;
 
-    /*  string to_open = application_name+".ramulator.address_distribution";
+      string to_open = application_name+".ramulator.address_distribution";
       cout << "Address distribution stored at: " << to_open << endl;
       cout << "Number of cores: " << num_cores << endl;
       std::ofstream ofs(to_open.c_str(), std::ofstream::out);
@@ -944,8 +1264,8 @@ public:
           ofs << i << " " << j << " " <<  address_distribution[i][j] << "\n";
         }
       }
-      ofs.close();*/
-      //memory_addresses.close();
+      ofs.close();
+      memory_addresses.close();
     }
 
     long page_allocator(long addr, int coreid) {
@@ -1004,7 +1324,6 @@ public:
 
 
 private:
-
     int calc_log2(int val){
         int n = 0;
         while ((val >>= 1))
