@@ -670,10 +670,16 @@ public:
                 myfile << req.addr;
                 myfile << ", ";
                 myfile << "HMC";
-                myfile << ", bank:"; 
-                myfile << req.addr_vec[int(HMC::Level::Bank)];
                 myfile << ", vault: " ,
                 myfile << req.addr_vec[int(HMC::Level::Vault)];
+                myfile << ", bank:"; 
+                myfile << req.addr_vec[int(HMC::Level::Bank)];
+                myfile << ", bankgroup";
+                myfile << req.addr_vec[int(HMC::Level::BankGroup)];
+                myfile << ", column:"; 
+                myfile << req.addr_vec[int(HMC::Level::Column)];
+                myfile << ", row:"; 
+                myfile << req.addr_vec[int(HMC::Level::Row)];
                 myfile << "\n";
                 myfile.close();
             }
