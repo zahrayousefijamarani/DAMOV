@@ -7,6 +7,12 @@
 #include <map>
 #include <string>
 #include <functional>
+#define NETWORK_WIDTH 6
+#define NETWORK_HEIGHT 6
+#define WRITE_LENGTH 5
+#define READ_LENGTH 6
+#define OTHER_LENGTH 1
+#define MAX_HOP (NETWORK_WIDTH+NETWORK_HEIGHT)*READ_LENGTH
 
 #ifndef DEBUG_HMC
 #define debug_hmc(...)
