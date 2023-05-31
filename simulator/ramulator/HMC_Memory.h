@@ -623,7 +623,7 @@ public:
         myfile << ", ";
         myfile << req.addr;
         myfile << ", ";
-        myfile << channel->spec->standard_name;
+        myfile << "HMC";
         myfile << ", bank:"; 
         myfile << req.addr_vec[int(HMC::Level::Bank)];
         myfile << ", vault: " ,
