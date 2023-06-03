@@ -757,8 +757,10 @@ public:
             myfile << req.addr;
             myfile << ", ";
             myfile << "HMC";
-            myfile << ", vault: " ,
+            myfile << ", destination vault: " ,
             myfile << req.addr_vec[int(HMC::Level::Vault)];
+            myfile << ", source vault: "
+            myfile << req.coreid;
             myfile << ", bank:"; 
             myfile << req.addr_vec[int(HMC::Level::Bank)];
             myfile << ", bankgroup";
