@@ -735,24 +735,11 @@ public:
           if (req.depart <= clk) {
             if (req.depart - req.arrive > 1) {
               channel->update_serving_requests(req.addr_vec.data(), -1, clk);
-                
-            }
-
+              ofstream myfile;
+            myfile.open ("zahra_read_latency_hmc.txt", ios::app);
             if(pim_mode_enabled){
                 req.depart_hmc = clk;
-                if (req.type == Request::Type::READ || req.type == Request::Type::WRITE) {
-                  req.callback(req);
-                  pending.pop_front();
-               }
             }
-            else{
-                Packet packet = form_response_packet(req);
-                response_packets_buffer.push_back(packet);
-                pending.pop_front();
-            }
-
-            ofstream myfile;
-            myfile.open ("zahra_read_latency_hmc.txt", ios::app);
             myfile << req.depart_hmc - req.arrive_hmc;
             myfile << ", ";
             myfile << req.depart - req.arrive;
@@ -781,7 +768,23 @@ public:
             myfile << ", row:"; 
             myfile << req.addr_vec[int(HMC::Level::Row)];
             myfile << "\n";
-            myfile.close();
+            myfile.close();  
+            }
+
+            if(pim_mode_enabled){
+                req.depart_hmc = clk;
+                if (req.type == Request::Type::READ || req.type == Request::Type::WRITE) {
+                  req.callback(req);
+                  pending.pop_front();
+               }
+            }
+            else{
+                Packet packet = form_response_packet(req);
+                response_packets_buffer.push_back(packet);
+                pending.pop_front();
+            }
+
+            
 
           }
         }
