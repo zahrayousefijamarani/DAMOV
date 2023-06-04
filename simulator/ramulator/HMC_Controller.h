@@ -761,6 +761,8 @@ public:
             myfile << req.addr_vec[int(HMC::Level::Vault)];
             myfile << ", source vault: ";
             myfile << req.coreid;
+            myfile << ", hops: ";
+            myfile << req.hops;
             myfile << ", bank:"; 
             myfile << req.addr_vec[int(HMC::Level::Bank)];
             myfile << ", bankgroup";
