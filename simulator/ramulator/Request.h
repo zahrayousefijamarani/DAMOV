@@ -37,6 +37,7 @@ public:
     long arrive_hmc;
     long depart_hmc;
     unsigned hops = 0;
+    int served_without_hops = 0;
     int burst_count = 0;
     int transaction_bytes = 0;
     function<void(Request&)> callback; // call back with more info
