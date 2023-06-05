@@ -185,12 +185,6 @@ public:
           arrivel_q = tmp;
         }
         void arrive(Request& req) {
-            if(req.hops != 0) {
-                cout << req.addr;
-                cout << " ";
-                cout << req.hops;
-                cout << "\n";
-            }
             if(req.hops == 0) {
                 q.push_back(req);
             } else {
