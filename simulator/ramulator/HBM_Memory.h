@@ -1,26 +1,15 @@
-#ifndef __MEMORY_H
-#define __MEMORY_H
+#ifndef __HBM_MEMORY_H
+#define __HBM_MEMORY_H
 
-#include "Config.h"
-#include "DRAM.h"
-#include "Request.h"
-#include "Controller.h"
-#include "HMC_Controller.h"
-#include "SpeedyController.h"
-#include "Statistics.h"
-#include "GDDR5.h"
 #include "HBM.h"
-#include "HMC.h"
-#include "LPDDR3.h"
-#include "LPDDR4.h"
-#include "WideIO2.h"
-#include "DSARP.h"
+#include "Memory.h"
 #include <vector>
-#include <functional>
-#include <cmath>
-#include <cassert>
-#include <tuple>
-#include <string>
+#include "Statistics.h"
+#include <fstream>
+#include <array>
+#include <climits>
+#include <bitset>
+
 using namespace std;
 
 namespace ramulator
@@ -571,4 +560,4 @@ private:
 
 } /*namespace ramulator*/
 
-#endif /*__MEMORY_H*/
+#endif /*__HBM_MEMORY_H*/

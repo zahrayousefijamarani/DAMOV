@@ -1,5 +1,5 @@
-#ifndef __CONTROLLER_H
-#define __CONTROLLER_H
+#ifndef __HBM_CONTROLLER_H
+#define __HBM_CONTROLLER_H
 
 #include <cassert>
 #include <cstdio>
@@ -8,20 +8,10 @@
 #include <list>
 #include <string>
 #include <vector>
-#include <iostream>
-#include "Config.h"
-#include "DRAM.h"
-#include "Refresh.h"
-#include "Request.h"
+#include <unordered_map>
+#include "Controller.h"
 #include "Scheduler.h"
-#include "Statistics.h"
-#include "HMC.h"
-#include "ALDRAM.h"
-#include "SALP.h"
-#include "TLDRAM.h"
-#include "WideIO2.h"
-#include "DDR4.h"
-#include "GDDR5.h"
+
 #include "HBM.h"
 
 using namespace std;
@@ -158,12 +148,12 @@ public:
 public:
     /* Member Variables */
     long clk = 0;
-    DRAM<T>* channel;
+    DRAM<HBM>* channel;
 
-    Scheduler<T>* scheduler;  // determines the highest priority request whose commands will be issued
-    RowPolicy<T>* rowpolicy;  // determines the row-policy (e.g., closed-row vs. open-row)
-    RowTable<T>* rowtable;  // tracks metadata about rows (e.g., which are open and for how long)
-    Refresh<T>* refresh;
+    Scheduler<HBM>* scheduler;  // determines the highest priority request whose commands will be issued
+    RowPolicy<HBM>* rowpolicy;  // determines the row-policy (e.g., closed-row vs. open-row)
+    RowTable<HBM>* rowtable;  // tracks metadata about rows (e.g., which are open and for how long)
+    Refresh<HBM>* refresh;
 
     struct Queue {
         list<Request> q;
@@ -194,12 +184,12 @@ public:
     bool pim_mode_enabled = false;
 
     /* Constructor */
-    Controller(const Config& configs, DRAM<T>* channel) :
+    Controller(const Config& configs, DRAM<HBM>* channel) :
         channel(channel),
-        scheduler(new Scheduler<T>(this)),
-        rowpolicy(new RowPolicy<T>(this)),
-        rowtable(new RowTable<T>(this)),
-        refresh(new Refresh<T>(this)),
+        scheduler(new Scheduler<HBM>(this)),
+        rowpolicy(new RowPolicy<HBM>(this)),
+        rowtable(new RowTable<HBM>(this)),
+        refresh(new Refresh<HBM>(this)),
         cmd_trace_files(channel->children.size())
     {
         record_cmd_trace = configs.record_cmd_trace();
@@ -608,20 +598,18 @@ public:
 		  myfile << ", ";
 		  myfile << channel->spec->standard_name;
 		  myfile << ", bank:";  
-		  int bank_id = req.addr_vec[int(T::Level::Bank)];
-          	  if (channel->spec->standard_name == "DDR4" || channel->spec->standard_name == "GDDR5" || channel->spec->standard_name == "HBM") {
-              		// if has bankgroup
-              		bank_id += req.addr_vec[int(T::Level::Bank) - 1] * channel->spec->org_entry.count[int(T::Level::Bank)];
-          	  }
+		  int bank_id = req.addr_vec[int(HBM::Level::Bank)];
+          bank_id += req.addr_vec[int(HBM::Level::Bank) - 1] * channel->spec->org_entry.count[int(HBM::Level::Bank)];
+          	 
 		  myfile << bank_id;
 		  myfile << ", channel: " ,
 		  myfile << channel->id;
           myfile << ", rank:";
-          myfile << req.addr_vec[int(T::Level::Rank)];
+          myfile << req.addr_vec[int(HBM::Level::Rank)];
           myfile << ", column:";
-          myfile << req.addr_vec[int(T::Level::Column)];
+          myfile << req.addr_vec[int(HBM::Level::Column)];
           myfile << ", row:";  
-          myfile << req.addr_vec[int(T::Level::Row)];
+          myfile << req.addr_vec[int(HBM::Level::Row)];
 		  myfile << "\n";
                   myfile.close();
                   
@@ -667,7 +655,7 @@ public:
         if (req == queue->q.end() || !is_ready(req)) {
           if (!no_DRAM_latency) {
             // we couldn't find a command to schedule -- let's try to be speculative
-            auto cmd = T::Command::PRE;
+            auto cmd = HBM::Command::PRE;
             vector<int> victim = rowpolicy->get_victim(cmd);
             if (!victim.empty()){
                 issue_cmd(cmd, victim);
@@ -741,11 +729,11 @@ public:
 
     bool is_ready(list<Request>::iterator req)
     {
-        typename T::Command cmd = get_first_cmd(req);
+        typename HBM::Command cmd = get_first_cmd(req);
         return channel->check(cmd, req->addr_vec.data(), clk);
     }
 
-    bool is_ready(typename T::Command cmd, const vector<int>& addr_vec)
+    bool is_ready(typename HBM::Command cmd, const vector<int>& addr_vec)
     {
         return channel->check(cmd, addr_vec.data(), clk);
     }
@@ -753,11 +741,11 @@ public:
     bool is_row_hit(list<Request>::iterator req)
     {
         // cmd must be decided by the request type, not the first cmd
-        typename T::Command cmd = channel->spec->translate[int(req->type)];
+        typename HBM::Command cmd = channel->spec->translate[int(req->type)];
         return channel->check_row_hit(cmd, req->addr_vec.data());
     }
 
-    bool is_row_hit(typename T::Command cmd, const vector<int>& addr_vec)
+    bool is_row_hit(typename HBM::Command cmd, const vector<int>& addr_vec)
     {
         return channel->check_row_hit(cmd, addr_vec.data());
     }
@@ -765,11 +753,11 @@ public:
     bool is_row_open(list<Request>::iterator req)
     {
         // cmd must be decided by the request type, not the first cmd
-        typename T::Command cmd = channel->spec->translate[int(req->type)];
+        typename HBM::Command cmd = channel->spec->translate[int(req->type)];
         return channel->check_row_open(cmd, req->addr_vec.data());
     }
 
-    bool is_row_open(typename T::Command cmd, const vector<int>& addr_vec)
+    bool is_row_open(typename HBM::Command cmd, const vector<int>& addr_vec)
     {
         return channel->check_row_open(cmd, addr_vec.data());
     }
@@ -792,9 +780,9 @@ public:
     }
 
 private:
-    typename T::Command get_first_cmd(list<Request>::iterator req)
+    typename HBM::Command get_first_cmd(list<Request>::iterator req)
     {
-        typename T::Command cmd = channel->spec->translate[int(req->type)];
+        typename HBM::Command cmd = channel->spec->translate[int(req->type)];
         if (!no_DRAM_latency) {
           return channel->decode(cmd, req->addr_vec.data());
         } else {
@@ -802,15 +790,15 @@ private:
         }
     }
 
-    void issue_cmd(typename T::Command cmd, const vector<int>& addr_vec)
+    void issue_cmd(typename HBM::Command cmd, const vector<int>& addr_vec)
     {
         assert(is_ready(cmd, addr_vec));
 
         if (with_drampower) {
-          int bank_id = addr_vec[int(T::Level::Bank)];
+          int bank_id = addr_vec[int(HBM::Level::Bank)];
           if (channel->spec->standard_name == "DDR4" || channel->spec->standard_name == "GDDR5" || channel->spec->standard_name == "HBM") {
               // if has bankgroup
-              bank_id += addr_vec[int(T::Level::Bank) - 1] * channel->spec->org_entry.count[int(T::Level::Bank)];
+              bank_id += addr_vec[int(HBM::Level::Bank) - 1] * channel->spec->org_entry.count[int(HBM::Level::Bank)];
           }
 
           update_counter++;
@@ -835,25 +823,25 @@ private:
             if (cmd_name == "PREA" || cmd_name == "REF")
                 file<<endl;
             else{
-                int bank_id = addr_vec[int(T::Level::Bank)];
+                int bank_id = addr_vec[int(HBM::Level::Bank)];
                 if (channel->spec->standard_name == "DDR4" || channel->spec->standard_name == "GDDR5" || channel->spec->standard_name == "HBM") {
-                    bank_id += addr_vec[int(T::Level::Bank) - 1] * channel->spec->org_entry.count[int(T::Level::Bank)];
+                    bank_id += addr_vec[int(HBM::Level::Bank) - 1] * channel->spec->org_entry.count[int(HBM::Level::Bank)];
                 }
                 file<<','<<bank_id<<endl;
             }
         }
         if (print_cmd_trace){
             printf("%5s %10ld:", channel->spec->command_name[int(cmd)].c_str(), clk);
-            for (int lev = 0; lev < int(T::Level::MAX); lev++)
+            for (int lev = 0; lev < int(HBM::Level::MAX); lev++)
                 printf(" %5d", addr_vec[lev]);
             printf("\n");
         }
     }
-    vector<int> get_addr_vec(typename T::Command cmd, list<Request>::iterator req){
+    vector<int> get_addr_vec(typename HBM::Command cmd, list<Request>::iterator req){
         return req->addr_vec;
     }
 };
 
 } /*namespace ramulator*/
 
-#endif /*__CONTROLLER_H*/
+#endif /*__HBM_CONTROLLER_H*/
