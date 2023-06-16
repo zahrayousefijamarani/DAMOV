@@ -115,6 +115,7 @@ struct GlobSimInfo {
     bool oooDecode; //if true, Decoder does OOO (instr->uop) decoding
     bool acceleratorDecode; //if true, Decoder does OOO (instr->uop) decoding
     bool pim_mode;
+    bool network_overhead;
     uint64_t num_dram_requests;
     PAD();
 
