@@ -6,6 +6,7 @@
 #include "Request.h"
 #include "Controller.h"
 #include "HMC_Controller.h"
+#include "HBM_Controller.h"
 #include "SpeedyController.h"
 #include "Statistics.h"
 #include "GDDR5.h"

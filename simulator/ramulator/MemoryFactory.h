@@ -7,10 +7,12 @@
 
 #include "Config.h"
 #include "Memory.h"
+#include "HBM_Memory.h"
 #include "HMC_Memory.h"
 #include "WideIO2.h"
 #include "SALP.h"
 #include "HMC.h"
+#include "HBM.h"
 #include <iostream>
 
 using namespace std;
