@@ -121,7 +121,8 @@ MemoryBase *MemoryFactory<HBM>::create(const Config& configs, int cacheline) {
         channel->regStats("");
         ctrls.push_back(new Controller<HBM>(configs, channel));
     }
-    return (MemoryBase *) (new Memory<HBM>(configs, ctrls));
+    Memory<HBM, Controller> *memory =  new Memory<HBM,Controller>(configs, ctrls);
+    return (MemoryBase *) (memory);
 }
 
 
