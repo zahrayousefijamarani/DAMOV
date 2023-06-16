@@ -183,6 +183,21 @@ public:
     bool unlimit_bandwidth = false;
     bool pim_mode_enabled = false;
 
+    void fake_ideal_DRAM(const Config& configs) {
+        if (configs["no_DRAM_latency"] == "true") {
+        no_DRAM_latency = true;
+        scheduler->type = Scheduler<HBM>::Type::FRFCFS;
+        }
+        if (configs["unlimit_bandwidth"] == "true") {
+        unlimit_bandwidth = true;
+        printf("nBL: %d\n", channel->spec->speed_entry.nBL);
+        channel->spec->speed_entry.nBL = 0;
+        channel->spec->read_latency = channel->spec->speed_entry.nCL;
+        channel->spec->speed_entry.nCCDS = 1;
+        channel->spec->speed_entry.nCCDL = 1;
+        }
+    }
+
     /* Constructor */
     Controller(const Config& configs, DRAM<HBM>* channel) :
         channel(channel),

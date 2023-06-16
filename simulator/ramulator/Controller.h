@@ -850,8 +850,7 @@ void Controller<DDR4>::fake_ideal_DRAM(const Config& configs);
 template <>
 void Controller<GDDR5>::fake_ideal_DRAM(const Config& configs);
 
-template <>
-void Controller<HBM>::fake_ideal_DRAM(const Config& configs);
+
 
 } /*namespace ramulator*/
 
