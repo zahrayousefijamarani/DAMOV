@@ -96,8 +96,8 @@ public:
     long free_physical_pages_remaining;
     map<pair<int, long>, long> page_translation;
 
-    vector<Controller<T>*> ctrls;
-    T * spec;
+    vector<Controller<HBM>*> ctrls;
+    HBM * spec;
     vector<int> addr_bits;
 
     int tx_bits;
@@ -106,7 +106,7 @@ public:
     Memory(const Config& configs, vector<Controller<HBM>*> ctrls)
         : ctrls(ctrls),
           spec(ctrls[0]->channel->spec),
-          addr_bits(int(T::Level::MAX))
+          addr_bits(int(HBM::Level::MAX))
     {
 
         // make sure 2^N channels/ranks
@@ -125,7 +125,7 @@ public:
         // If hi address bits will not be assigned to Rows
         // then the chips must not be LPDDRx 6Gb, 12Gb etc.
         if (type != Type::RoBaRaCoCh && spec->standard_name.substr(0, 5) == "LPDDR")
-            assert((sz[int(T::Level::Row)] & (sz[int(T::Level::Row)] - 1)) == 0);
+            assert((sz[int(HBM::Level::Row)] & (sz[int(HBM::Level::Row)] - 1)) == 0);
 
         max_address = spec->channel_width / 8;
 
@@ -134,7 +134,7 @@ public:
             max_address *= sz[lev];
         }
 
-        addr_bits[int(T::Level::MAX) - 1] -= calc_log2(spec->prefetch_size);
+        addr_bits[int(HBM::Level::MAX) - 1] -= calc_log2(spec->prefetch_size);
 
         // Initiating translation
         if (configs.contains("translation")) {
@@ -181,12 +181,12 @@ public:
             .precision(0)
             ;
         incoming_requests_per_channel
-            .init(sz[int(T::Level::Channel)])
+            .init(sz[int(HBM::Level::Channel)])
             .name("incoming_requests_per_channel")
             .desc("Number of incoming requests to each DRAM channel")
             ;
         incoming_read_reqs_per_channel
-            .init(sz[int(T::Level::Channel)])
+            .init(sz[int(HBM::Level::Channel)])
             .name("incoming_read_reqs_per_channel")
             .desc("Number of incoming read requests to each DRAM channel")
             ;
@@ -430,7 +430,7 @@ public:
             case int(Type::RoBaRaCoCh):
                 req.addr_vec[0] = slice_lower_bits(addr, addr_bits[0]);
                 req.addr_vec[addr_bits.size() - 1] = slice_lower_bits(addr, addr_bits[addr_bits.size() - 1]);
-                for (int i = 1; i <= int(T::Level::Row); i++)
+                for (int i = 1; i <= int(HBM::Level::Row); i++)
                     req.addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
                 break;
             default:
@@ -443,12 +443,12 @@ public:
             if (req.type == Request::Type::READ) {
               ++num_read_requests[coreid];
 
-	      ++incoming_read_reqs_per_channel[req.addr_vec[int(T::Level::Channel)]];
+	      ++incoming_read_reqs_per_channel[req.addr_vec[int(HBM::Level::Channel)]];
             }
             if (req.type == Request::Type::WRITE) {
               ++num_write_requests[coreid];
            }
-            ++incoming_requests_per_channel[req.addr_vec[int(T::Level::Channel)]];
+            ++incoming_requests_per_channel[req.addr_vec[int(HBM::Level::Channel)]];
           return true;
         }
         return false;
@@ -465,7 +465,7 @@ public:
     void finish() {
       dram_capacity = max_address;
       int *sz = spec->org_entry.count;
-      maximum_bandwidth = spec->speed_entry.rate * 1e6 * spec->channel_width * sz[int(T::Level::Channel)] / 8;
+      maximum_bandwidth = spec->speed_entry.rate * 1e6 * spec->channel_width * sz[int(HBM::Level::Channel)] / 8;
 
       long dram_cycles = num_dram_cycles.value();
       long total_read_req = num_read_requests.total();
