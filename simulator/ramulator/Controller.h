@@ -601,9 +601,8 @@ public:
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
                   (*read_latency_sum) += req.depart - req.arrive;
-                  channel->update_serving_requests(req.addr_vec.data(), -1, clk);
+                channel->update_serving_requests(req.addr_vec.data(), -1, clk);
                 }
-
                 req.callback(req);
                 pending.pop_front();
             }

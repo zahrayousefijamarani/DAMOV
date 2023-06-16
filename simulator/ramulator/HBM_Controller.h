@@ -29,7 +29,7 @@ using namespace std;
 namespace ramulator
 {
 
-template <typename T>
+template <>
 class Controller<HBM>
 {
 public:
