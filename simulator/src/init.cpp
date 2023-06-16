@@ -947,7 +947,7 @@ void SimInit(const char* configFile, const char* outputDir, uint32_t shmid) {
 
     //PIM Mode is enabled
     zinfo->pim_mode = config.get<bool>("sim.pimMode", false);
-    //zinfo->network_overhead = config.get<bool>("sim.networkOverhead", false);
+    zinfo->network_overhead = config.get<bool>("sim.networkOverhead", true);
 
     uint64_t maxSimTime = config.get<uint32_t>("sim.maxSimTime", 0);
     zinfo->maxSimTimeNs = maxSimTime*1000L*1000L*1000L;

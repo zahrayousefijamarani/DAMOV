@@ -93,7 +93,40 @@ MemoryBase *MemoryFactory<HMC>::create(const Config& configs, int cacheline) {
     return (MemoryBase *)memory;
 }
 
+
+template <>
+MemoryBase *MemoryFactory<HBM>::create(const Config& configs, int cacheline) {
+    int channels = stoi(configs["channels"], NULL, 0);
+    int ranks = stoi(configs["ranks"], NULL, 0);
+    
+    validate(channels, ranks, configs);
+
+    const string& org_name = configs["org"];
+    const string& speed_name = configs["speed"];
+
+    HBM *spec = new HBM(org_name, speed_name);
+
+    extend_channel_width(spec, cacheline);
+
+    int& default_ranks = spec->org_entry.count[int(HBM::Level::Rank)];
+    int& default_channels = spec->org_entry.count[int(HBM::Level::Channel)];
+
+    if (default_channels == 0) default_channels = channels;
+    if (default_ranks == 0) default_ranks = ranks;
+
+    vector<Controller<HBM> *> ctrls;
+    for (int c = 0; c < channels; c++){
+        DRAM<HBM>* channel = new DRAM<HBM>(spec, HBM::Level::Channel);
+        channel->id = c;
+        channel->regStats("");
+        ctrls.push_back(new Controller<HBM>(configs, channel));
+    }
+    return (MemoryBase *) (new Memory<HBM>(configs, ctrls));
 }
+
+
+}
+
 
 // This function can be used by autoconf AC_CHECK_LIB since
 // apparently it can't detect C++ functions.

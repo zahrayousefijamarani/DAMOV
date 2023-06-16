@@ -408,7 +408,7 @@ public:
 
         pim_mode_enabled = configs.pim_mode_enabled();
         network_overhead = configs.network_overhead_enabled();
-        network_overhead = true;
+
 
         capacity_per_stack = spec->channel_width / 8;
 

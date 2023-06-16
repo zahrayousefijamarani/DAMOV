@@ -82,6 +82,8 @@ template <>
 MemoryBase *MemoryFactory<WideIO2>::create(const Config& configs, int cacheline);
 template <>
 MemoryBase *MemoryFactory<SALP>::create(const Config& configs, int cacheline);
+template <>
+MemoryBase *MemoryFactory<HBM>::create(const Config& configs, int cacheline);
 
 
 } /*namespace ramulator*/

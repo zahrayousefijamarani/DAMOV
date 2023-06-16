@@ -30,7 +30,7 @@ namespace ramulator
 {
 
 template <typename T>
-class Controller
+class Controller<HBM>
 {
 public:
     // For counting bandwidth
@@ -191,18 +191,20 @@ public:
     // ideal DRAM
     bool no_DRAM_latency = false;
     bool unlimit_bandwidth = false;
+    bool pim_mode_enabled = false;
 
     void fake_ideal_DRAM(const Config& configs) {
         if (configs["no_DRAM_latency"] == "true") {
-          no_DRAM_latency = true;
-          scheduler->type = Scheduler<T>::Type::FRFCFS;
+        no_DRAM_latency = true;
+        scheduler->type = Scheduler<HBM>::Type::FRFCFS;
         }
         if (configs["unlimit_bandwidth"] == "true") {
-          unlimit_bandwidth = true;
-          printf("nBL: %d\n", channel->spec->speed_entry.nBL);
-          assert(channel->spec->speed_entry.nBL == 0);
-          assert(channel->spec->read_latency == channel->spec->speed_entry.nCL);
-          assert(channel->spec->speed_entry.nCCD == 1);
+        unlimit_bandwidth = true;
+        printf("nBL: %d\n", channel->spec->speed_entry.nBL);
+        channel->spec->speed_entry.nBL = 0;
+        channel->spec->read_latency = channel->spec->speed_entry.nCL;
+        channel->spec->speed_entry.nCCDS = 1;
+        channel->spec->speed_entry.nCCDL = 1;
         }
     }
 
@@ -226,6 +228,7 @@ public:
             for (unsigned int i = 0; i < channel->children.size(); i++)
                 cmd_trace_files[i].open(prefix + to_string(i) + suffix);
         }
+        pim_mode_enabled = configs.pim_mode_enabled();
         with_drampower = false;
         fake_ideal_DRAM(configs);
         if (with_drampower) {
@@ -601,7 +604,44 @@ public:
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
                   (*read_latency_sum) += req.depart - req.arrive;
-                  channel->update_serving_requests(req.addr_vec.data(), -1, clk);
+                  ofstream myfile;
+                  myfile.open ("zahra_read_latency.txt", ios::app);
+                  myfile << req.depart - req.arrive;
+                  myfile << ", ";
+		  switch(int(req.type)){
+			case int(Request::Type::READ): myfile << "read"; break;
+			case int(Request::Type::WRITE): myfile << "write"; break;
+			case int(Request::Type::REFRESH): myfile << "refresh"; break;
+			case int(Request::Type::POWERDOWN) : myfile << "powerdown"; break;
+			case int(Request::Type::SELFREFRESH) : myfile << "selfrefresh"; break;
+			case int(Request::Type::EXTENSION): myfile << "extension"; break;
+			case int(Request::Type::MAX): myfile << "max"; break;
+		  }
+		  //myfile << req.Type;
+		  myfile << ", ";
+		  myfile << req.addr;
+		  myfile << ", ";
+		  myfile << channel->spec->standard_name;
+		  myfile << ", bank:";  
+		  int bank_id = req.addr_vec[int(T::Level::Bank)];
+          	  if (channel->spec->standard_name == "DDR4" || channel->spec->standard_name == "GDDR5" || channel->spec->standard_name == "HBM") {
+              		// if has bankgroup
+              		bank_id += req.addr_vec[int(T::Level::Bank) - 1] * channel->spec->org_entry.count[int(T::Level::Bank)];
+          	  }
+		  myfile << bank_id;
+		  myfile << ", channel: " ,
+		  myfile << channel->id;
+          myfile << ", rank:";
+          myfile << req.addr_vec[int(T::Level::Rank)];
+          myfile << ", column:";
+          myfile << req.addr_vec[int(T::Level::Column)];
+          myfile << ", row:";  
+          myfile << req.addr_vec[int(T::Level::Row)];
+		  myfile << "\n";
+                  myfile.close();
+                  
+		  channel->update_serving_requests(
+                  req.addr_vec.data(), -1, clk);
                 }
 
                 req.callback(req);
@@ -828,29 +868,6 @@ private:
         return req->addr_vec;
     }
 };
-
-template <>
-vector<int> Controller<SALP>::get_addr_vec(
-    SALP::Command cmd, list<Request>::iterator req);
-
-template <>
-bool Controller<SALP>::is_ready(list<Request>::iterator req);
-
-template <>
-void Controller<ALDRAM>::update_temp(ALDRAM::Temp current_temperature);
-
-template <>
-void Controller<TLDRAM>::tick();
-
-template <>
-void Controller<WideIO2>::tick();
-
-template <>
-void Controller<DDR4>::fake_ideal_DRAM(const Config& configs);
-
-template <>
-void Controller<GDDR5>::fake_ideal_DRAM(const Config& configs);
-
 
 } /*namespace ramulator*/
 
