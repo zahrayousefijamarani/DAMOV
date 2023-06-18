@@ -452,7 +452,8 @@ public:
     }
 
     int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c){
-        channel_change_latency = 5;
+        int channel_change_latency = 5;
+        int bankgroup_change_latency = 1;
         return source_p == destination_p ? abs(source_c - destination_c) * bankgroup_change_latency : abs(source_p - destination_p) * channel_change_latency;
     }
 
