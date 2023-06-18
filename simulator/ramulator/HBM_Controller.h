@@ -596,7 +596,7 @@ public:
                     (*read_latency_sum) += req.depart - req.arrive;
                     ofstream myfile;
                     myfile.open ("zahra_read_latency.txt", ios::app);
-                    myfile << req.depart - req.arrive;
+                    myfile << req.depart - req.arrive + req.hops;
                     myfile << ", ";
                     switch(int(req.type)){
                         case int(Request::Type::READ): myfile << "read"; break;
@@ -617,7 +617,7 @@ public:
                     bank_id += req.addr_vec[int(HBM::Level::Bank) - 1] * channel->spec->org_entry.count[int(HBM::Level::Bank)];
                         
                     myfile << bank_id;
-                    myfile << ", channel: " ,
+                    myfile << ", channel: " ;
                     myfile << channel->id;
                     myfile << ", rank:";
                     myfile << req.addr_vec[int(HBM::Level::Rank)];
