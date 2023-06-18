@@ -216,6 +216,7 @@ void Ramulator::enqueue(RamulatorAccEvent* ev, uint64_t cycle) {
   if(ev->isWrite()){
     ramulator::Request req((long)ev->getAddr(), ramulator::Request::Type::WRITE, write_cb_func,ev->getCoreID());
     addr_tmp = req._addr;
+    req.childid = ev->getChildID();
 
     if(!wrapper->send(req)){
       overflowQueue.push_back(ev);
@@ -227,6 +228,7 @@ void Ramulator::enqueue(RamulatorAccEvent* ev, uint64_t cycle) {
   else {
     ramulator::Request req((long)ev->getAddr(), ramulator::Request::Type::READ, read_cb_func, ev->getCoreID());
     long addr_tmp = req._addr;
+    req.childid = ev->getChildID();
 
     if(!wrapper->send(req)){
       overflowQueue.push_back(ev);
