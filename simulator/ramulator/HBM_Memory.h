@@ -427,7 +427,7 @@ public:
         }
 
 
-    if(pim_mode_enabled && network_overhead_enabled)
+    if(pim_mode_enabled && network_overhead)
     {
         req.hops = calculate_extra_movement_latency();
     }
