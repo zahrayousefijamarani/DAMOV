@@ -626,7 +626,11 @@ public:
           myfile << ", row:";  
           myfile << req.addr_vec[int(HBM::Level::Row)];
 		  myfile << "\n";
-                  myfile.close();
+          myfile << ", req.childid: ";
+          myfile << req.childid;
+          myfile << ", req.coreid: ";
+          myfile << req.coreid;
+          myfile.close();
                   
 		  channel->update_serving_requests(
                   req.addr_vec.data(), -1, clk);

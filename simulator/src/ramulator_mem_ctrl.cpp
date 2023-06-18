@@ -41,10 +41,11 @@ class RamulatorAccEvent : public TimingEvent {
     bool write;
     Address addr;
     uint32_t coreid;
+    uint32_t childid;
   public:
     uint64_t sCycle;
-    RamulatorAccEvent(Ramulator* _dram, bool _write, Address _addr, int32_t domain, uint32_t _coreid) :
-            TimingEvent(0, 0, domain), dram(_dram), write(_write), addr(_addr), coreid(_coreid) {}
+    RamulatorAccEvent(Ramulator* _dram, bool _write, Address _addr, int32_t domain, uint32_t _coreid, uint32_t _childid) :
+            TimingEvent(0, 0, domain), dram(_dram), write(_write), addr(_addr), coreid(_coreid), childid(_childid) {}
 
     bool isWrite() const {
       return write;
@@ -56,6 +57,10 @@ class RamulatorAccEvent : public TimingEvent {
 
     uint32_t getCoreID() const{
       return coreid;
+    }
+
+    uint32_t getChildID() const{
+      return childid;
     }
 
     void simulate(uint64_t startCycle) {
@@ -149,7 +154,7 @@ uint64_t Ramulator::access(MemReq& req) {
 
     if (zinfo->eventRecorders[req.srcId]) {
       Address addr = req.lineAddr <<lineBits;
-      RamulatorAccEvent* memEv = new (zinfo->eventRecorders[req.srcId]) RamulatorAccEvent(this, isWrite, addr, domain,req.srcId);
+      RamulatorAccEvent* memEv = new (zinfo->eventRecorders[req.srcId]) RamulatorAccEvent(this, isWrite, addr, domain,req.srcId, req.childId);
       memEv->setMinStartCycle(req.cycle);
       TimingRecord tr = {addr, req.cycle, respCycle, req.type, memEv, memEv};
       zinfo->eventRecorders[req.srcId]->pushRecord(tr);
@@ -170,6 +175,7 @@ uint32_t Ramulator::tick(uint64_t cycle) {
     if(ev->isWrite()){
       ramulator::Request req((long)ev->getAddr(), ramulator::Request::Type::WRITE, write_cb_func,ev->getCoreID());
       long addr_tmp = req._addr;
+      req.childid = ev->getChildID();
 
       if(wrapper->send(req)){
         overflowQueue.pop_front();
@@ -182,6 +188,8 @@ uint32_t Ramulator::tick(uint64_t cycle) {
     else {
       ramulator::Request req((long)ev->getAddr(), ramulator::Request::Type::READ, read_cb_func ,ev->getCoreID());
       long addr_tmp = req._addr;
+      req.childid = ev->getChildID();
+
 
       if(wrapper->send(req)){
         overflowQueue.pop_front();

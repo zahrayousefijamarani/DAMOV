@@ -425,6 +425,14 @@ public:
             default:
                 assert(false);
         }
+
+
+    if(pim_mode_enabled && network_overhead_enabled)
+    {
+        req.hops = calculate_extra_movement_latency();
+    }
+
+
 	if(ctrls[req.addr_vec[0]]->enqueue(req)) {
             // tally stats here to avoid double counting for requests that aren't enqueued
             ++num_incoming_requests;
@@ -441,6 +449,10 @@ public:
           return true;
         }
         return false;
+    }
+
+    int calculate_extra_movement_latency(){
+
     }
 
     int pending_requests()

@@ -20,6 +20,7 @@ public:
     long reqid = -1;
     // specify which core this request sent from, for virtual address translation
     int coreid = -1;
+    int childid = -1;
 
     enum class Type
     {
@@ -53,6 +54,7 @@ public:
         : is_first_command(true), addr_vec(addr_vec), coreid(coreid), type(type), callback(callback) {_addr = addr;}
 
     Request() {_addr = addr;}
+
 
 };
 
