@@ -625,6 +625,10 @@ public:
                     myfile << req.addr_vec[int(HBM::Level::Column)];
                     myfile << ", row:";  
                     myfile << req.addr_vec[int(HBM::Level::Row)];
+                    myfile << ", bankgroup:";
+                    myfile << req.addr_vec[int(HBM::Level::BankGroup)];
+                    myfile << "-bank:";  
+                    myfile << req.addr_vec[int(HBM::Level::Bank)];
                     myfile << ", req.childid: ";
                     myfile << req.childid;
                     myfile << ", req.coreid: ";
