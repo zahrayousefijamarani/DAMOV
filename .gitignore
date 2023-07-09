@@ -16,3 +16,4 @@ megatools-1.11.1.20230212-linux-x86_64.tar.gz
 megatools-1.11.1.20230212-linux-x86_64/
 simulator/build/
 simulator/zahra_read_latency.txt
+simulator/scripts/run_workloads.sh

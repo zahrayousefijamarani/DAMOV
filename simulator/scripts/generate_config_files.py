@@ -2,10 +2,10 @@ import sys
 import os
 import errno
 
-os.chdir("../workloads")
-PIM_ROOT = os.getcwd() +"/"
-os.chdir("../simulator") 
+os.chdir("../simulator/") 
 ROOT = os.getcwd() +"/"
+os.chdir("/host/zya122/workloads")
+PIM_ROOT = os.getcwd() +"/"
 
 def mkdir_p(directory):
     try:
