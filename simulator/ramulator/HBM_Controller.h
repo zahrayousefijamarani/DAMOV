@@ -593,7 +593,7 @@ public:
             Request& req = pending[0];
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
-                    (*read_latency_sum) += req.depart - req.arrive;
+                    (*read_latency_sum) += req.depart - req.arrive + req.hops;
                     ofstream myfile;
                     myfile.open ("zahra_read_latency.txt", ios::app);
                     myfile << req.depart - req.arrive + req.hops;

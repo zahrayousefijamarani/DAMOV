@@ -429,7 +429,7 @@ public:
 
     if(pim_mode_enabled && network_overhead)
     {          
-        req.hops = calculate_extra_movement_latency(req.coreid, req.childid, req.addr_vec[int(HBM::Level::Channel)], req.addr_vec[int(HBM::Level::BankGroup)]);
+        req.hops = calculate_extra_movement_latency(req.coreid, req.childid, req.addr_vec[int(HBM::Level::Channel)], req.addr_vec[int(HBM::Level::BankGroup)], req.type == Request::Type::READ);
     }
 
 
@@ -451,9 +451,12 @@ public:
         return false;
     }
 
-    int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c){
+    int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c, bool read){
+        source_p = source_p % 8;
+        destination_p = destination_p % 8;
         int channel_change_latency = 5;
-        int bankgroup_change_latency = 1;
+        channel_change_latency = read? channel_change_latency + 1 : channel_change_latency;
+        int bankgroup_change_latency = 0;
         return source_p == destination_p ? abs(source_c - destination_c) * bankgroup_change_latency : abs(source_p - destination_p) * channel_change_latency;
     }
 

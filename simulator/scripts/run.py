@@ -46,6 +46,15 @@ def get_stat_file(pu, file):
             f.write("python scripts/get_stats_per_app.py "+p + ">> result.txt \n")
     f.close()
 
+def get_stat_value(pu,file):
+    f = open(file, "a")
+    a = get_file_paths("zsim_stats/{0}/16/".format(pu))
+    for p in a:
+        if "ramulator.stats" in p:
+            f.write("echo \"{},{}\" >> result_latency.txt \n".format(p.split("/")[-1].split(".")[0], pu))
+            f.write("grep 'read_latency_avg' "+ p + ">> result_latency.txt \n")
+    f.close()
+
 def draw_stat_file(file):
     f = open(file, 'r')
     Lines = f.readlines()
@@ -79,6 +88,6 @@ run_workloads("pim_accelerator","run_workloads.sh")
 # get_stat_file("host_accelerator/no_prefetch", "get_stat.sh")
 # get_stat_file("host_accelerator/prefetch",  "get_stat.sh")
 get_stat_file("pim_accelerator",  "get_stat.sh")
-
+get_stat_value("pim_accelerator", "get_stat_latency.sh")
 
 draw_stat_file("result.txt")
