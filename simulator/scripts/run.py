@@ -71,8 +71,8 @@ def draw_stat_file(file):
             y_index += 1
         count += 1
     f.close()
-    plt.bar(x, y[0])
-    plt.show()   
+    # plt.bar(x, y[0])
+    # plt.show()   
     
     return x,y
 
@@ -120,3 +120,4 @@ get_stat_file("pim_accelerator",  "get_stat.sh")
 get_stat_value("pim_accelerator", "get_stat_latency.sh")
 
 draw_stat_file("result.txt")
+read_value_result_file("result_latency.txt")

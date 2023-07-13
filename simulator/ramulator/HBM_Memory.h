@@ -427,7 +427,7 @@ public:
         }
 
 
-    if(pim_mode_enabled && network_overhead)
+    if(pim_mode_enabled )
     {          
         req.hops = calculate_extra_movement_latency(req.coreid, req.childid, req.addr_vec[int(HBM::Level::Channel)], req.addr_vec[int(HBM::Level::BankGroup)], req.type == Request::Type::READ);
     }
