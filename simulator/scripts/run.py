@@ -1,7 +1,7 @@
 import os
 import subprocess
 import matplotlib.pyplot as plt
-
+import re
 
 def get_file_paths(base_dir):
     if not os.path.isdir(base_dir):
@@ -75,6 +75,35 @@ def draw_stat_file(file):
     plt.show()   
     
     return x,y
+
+def isfloat(num):
+    try:
+        float(num)
+        return True
+    except ValueError:
+        return False
+
+def read_value_result_file(file):
+    f = open(file, 'r')
+    Lines = f.readlines()
+    count = 0
+    x = []
+    y = []
+    for l in Lines:
+        if count % 2 == 0:
+            x.append(l.strip())
+        else:
+            if "ramulator.read_latency_avg" in l:
+                o = re.findall(r'\d+.\d+', l)
+                if len(o) != 0 and isfloat(o[0]):
+                    y.append(float(o[0]))
+                else:
+                    y.append(0)
+            else:
+                count -= 1            
+        count += 1
+    f.close()
+    return x, y
 
 
 

@@ -7,6 +7,7 @@
 *.o
 *.pc
 simulator/zsim_stats*/*
+simulator/config_files/*
 *.out
 *.csv
 simulator/.vscode/settings.json
