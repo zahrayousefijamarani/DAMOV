@@ -86,24 +86,37 @@ def isfloat(num):
 def read_value_result_file(file):
     f = open(file, 'r')
     Lines = f.readlines()
-    count = 0
+    # count = 0
     x = []
     y = []
+    saw = False
     for l in Lines:
-        if count % 2 == 0:
-            x.append(l.strip())
-        else:
-            if "ramulator.read_latency_avg" in l:
-                o = re.findall(r'\d+.\d+', l)
-                if len(o) != 0 and isfloat(o[0]):
-                    y.append(float(o[0]))
-                else:
-                    y.append(0)
+        if "ramulator.read_latency_avg" in l:
+            saw = True
+            o = re.findall(r'\d+.\d+', l)
+            if len(o) != 0 and isfloat(o[0]):
+                y.append(float(o[0]))
             else:
-                count -= 1            
-        count += 1
+                y.append(0)
+        else:
+            if (not saw) and len(x) != 0:
+                # y.append(0)
+                x.pop()
+            saw = False
+            x.append(l.strip())
+        # else:
+        #     if "ramulator.read_latency_avg" in l:
+        #         o = re.findall(r'\d+.\d+', l)
+        #         if len(o) != 0 and isfloat(o[0]):
+        #             y.append(float(o[0]))
+        #         else:
+        #             y.append(0)
+        #     else:
+        #         count -= 1            
+        # count += 1
     f.close()
     return x, y
+
 
 
 
