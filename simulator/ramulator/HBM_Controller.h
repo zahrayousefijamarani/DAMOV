@@ -157,8 +157,29 @@ public:
 
     struct Queue {
         list<Request> q;
+        list<Request> arrivel_q;
         unsigned int max = 32;
         unsigned int size() {return q.size();}
+        void update(){
+          list<Request> tmp;
+          for (auto& i : arrivel_q) {
+            assert(i.hops <= MAX_HOP);
+            if(i.hops == 0){
+              q.push_back(i);
+              continue;
+            }
+            i.hops -= 1;
+            tmp.push_back(i);
+          }
+          arrivel_q = tmp;
+        }
+        void arrive(Request& req) {
+            if(req.hops == 0) {
+                q.push_back(req);
+            } else {
+                arrivel_q.push_back(req);
+            }
+        }
     };
 
     Queue readq;  // queue for read requests
@@ -587,6 +608,11 @@ public:
         (*req_queue_length_sum) += readq.size() + writeq.size() + pending.size();
         (*read_req_queue_length_sum) += readq.size() + pending.size();
         (*write_req_queue_length_sum) += writeq.size();
+
+        readq.update();
+        writeq.update();
+        otherq.update();
+        
 
         /*** 1. Serve completed reads ***/
         if (pending.size()) {
