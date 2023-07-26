@@ -457,7 +457,7 @@ public:
         int channel_change_latency = 5;
         channel_change_latency = read? channel_change_latency + 1 : channel_change_latency;
         int bankgroup_change_latency = 0;
-        return source_p == destination_p ? abs(source_c - destination_c) * bankgroup_change_latency : abs(source_p - destination_p) * channel_change_latency;
+        return source_p == destination_p ? abs(source_c - destination_c) * bankgroup_change_latency : channel_change_latency; // abs(source_p - destination_p) * channel_change_latency;
     }
 
     int pending_requests()

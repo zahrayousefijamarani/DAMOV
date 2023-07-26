@@ -186,6 +186,41 @@ public:
     Queue writeq;  // queue for write requests
     Queue otherq;  // queue for all "other" requests (e.g., refresh)
 
+    struct PendingQueue {
+        deque<Request> q;
+        deque<Request> arrivel_q;
+        unsigned int size() {return q.size();}
+        void update(){
+          deque<Request> tmp;
+          for (auto& i : arrivel_q) {
+            assert(i.hops <= MAX_HOP);
+            if(i.hops == 0){
+              q.push_back(i);
+              continue;
+            }
+            i.hops -= 1;
+            tmp.push_back(i);
+          }
+          arrivel_q = tmp;
+        }
+        void arrive(Request& req) {
+            assert(req.hops <= MAX_HOP);
+            if(req.hops == 0) {
+                q.push_back(req);
+            } else {
+                arrivel_q.push_back(req);
+            }
+        }
+        void push_back(Request& req){
+            if(req.hops == 0) {
+                q.push_back(req);
+            } else {
+                arrivel_q.push_back(req);
+            }
+        }
+        void pop_front(){q.pop_front();}
+    };
+
     deque<Request> pending;  // read requests that are about to receive data from DRAM
     deque<Request> pending_write;  // read requests that are about to receive data from DRAM
     bool write_mode = false;  // whether write requests should be prioritized over reads
@@ -589,7 +624,8 @@ public:
             return false;
 
         req.arrive = clk;
-        queue.q.push_back(req);
+        // queue.q.push_back(req);
+        queue.arrive(req);
         // shortcut for read requests, if a write to same addr exists
         // necessary for coherence
         if (req.type == Request::Type::READ && find_if(writeq.q.begin(), writeq.q.end(),
@@ -619,11 +655,11 @@ public:
             Request& req = pending[0];
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
-                    (*read_latency_sum) += req.depart - req.arrive + req.hops;
+                    (*read_latency_sum) += req.depart - req.arrive; //+ req.hops;
                     if(false){
                         ofstream myfile;
                         myfile.open ("zahra_read_latency.txt", ios::app);
-                        myfile << req.depart - req.arrive + req.hops;
+                        myfile << req.depart - req.arrive; //+ req.hops;
                         myfile << ", ";
                         switch(int(req.type)){
                             case int(Request::Type::READ): myfile << "read"; break;
@@ -668,19 +704,23 @@ public:
                   req.addr_vec.data(), -1, clk);
                 }
 
-                req.callback(req);
-                pending.pop_front();
+                // req.callback(req);
+                // pending.pop_front();
+                if (req.type == Request::Type::READ || req.type == Request::Type::WRITE) {
+                  req.callback(req);
+                  pending.pop_front();
+               }
             }
         }
 
         /*** 1.1. Serve completed writes ***/
-        if (pending_write.size()) {
-            Request& req = pending_write[0];
-            if (req.depart <= clk) {
-                req.callback(req);
-                pending_write.pop_front();
-            }
-        }
+        // if (pending_write.size()) {
+        //     Request& req = pending_write[0];
+        //     if (req.depart <= clk) {
+        //         req.callback(req);
+        //         pending_write.pop_front();
+        //     }
+        // }
 
         /*** 2. Refresh scheduler ***/
         refresh->tick_ref();
@@ -770,7 +810,8 @@ public:
         if (req->type == Request::Type::WRITE) {
             channel->update_serving_requests(req->addr_vec.data(), -1, clk);
             req->depart = clk + channel->spec->write_latency;
-            pending_write.push_back(*req);
+            // pending_write.push_back(*req);
+            pending.push_back(*req);
 
         }
 
