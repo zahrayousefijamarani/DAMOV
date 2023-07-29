@@ -655,6 +655,7 @@ public:
             Request& req = pending[0];
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
+                    channel->update_serving_requests(req.addr_vec.data(), -1, clk);
                     (*read_latency_sum) += req.depart - req.arrive; //+ req.hops;
                     if(false){
                         ofstream myfile;
@@ -807,7 +808,7 @@ public:
         }
 
         if (req->type == Request::Type::WRITE) {
-            channel->update_serving_requests(req->addr_vec.data(), -1, clk);
+            // channel->update_serving_requests(req->addr_vec.data(), -1, clk);
             req->depart = clk + channel->spec->write_latency;
             // pending_write.push_back(*req);
             pending.push_back(*req);
