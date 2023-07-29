@@ -701,7 +701,8 @@ public:
                         myfile.close();
                     }
                   
-		        // channel->update_serving_requests(req.addr_vec.data(), -1, clk);
+		        channel->update_serving_requests(
+                  req.addr_vec.data(), -1, clk);
                 }
 
                 // req.callback(req);
