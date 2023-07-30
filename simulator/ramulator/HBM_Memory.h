@@ -434,7 +434,7 @@ public:
 
 
 	// if(ctrls[req.addr_vec[0]]->update_serving_requests(req)) {
-        if(!ctrls[req.addr_vec[int(HMC::Level::Channel)]] ->enqueue(req)){
+        if(!ctrls[req.addr_vec[int(HBM::Level::Channel)]] ->enqueue(req)){
             return false;
         }
             // tally stats here to avoid double counting for requests that aren't enqueued
