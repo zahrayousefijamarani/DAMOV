@@ -140,24 +140,7 @@ public:
         unsigned int size() {return q.size();}
     };
 
-    Queue readq;  // queue for read requests
-
-    
-          
-            
-    
-
-          
-          Expand Down
-          
-            
-    
-
-          
-          Expand Up
-    
-    @@ -588,6 +609,11 @@ class Controller<HBM>
-  
+    Queue readq;  // queue for read requests 
     Queue writeq;  // queue for write requests
     Queue otherq;  // queue for all "other" requests (e.g., refresh)
     deque<Request> pending;  // read requests that are about to receive data from DRAM
