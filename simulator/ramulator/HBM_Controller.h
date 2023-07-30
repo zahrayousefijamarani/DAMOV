@@ -165,6 +165,8 @@ public:
     Queue readq;  // queue for read requests 
     Queue writeq;  // queue for write requests
     Queue otherq;  // queue for all "other" requests (e.g., refresh)
+
+
     deque<Request> pending;  // read requests that are about to receive data from DRAM
     deque<Request> pending_write;  // read requests that are about to receive data from DRAM
     bool write_mode = false;  // whether write requests should be prioritized over reads
@@ -576,11 +578,11 @@ public:
             Request& req = pending[0];
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
-                    (*read_latency_sum) += req.depart - req.arrive + req.hops;
+                    (*read_latency_sum) += req.depart - req.arrive;// + req.hops;
                     if(false){
                         ofstream myfile;
                         myfile.open ("zahra_read_latency.txt", ios::app);
-                        myfile << req.depart - req.arrive + req.hops;
+                        myfile << req.depart - req.arrive;// + req.hops;
                         myfile << ", ";
                         switch(int(req.type)){
                             case int(Request::Type::READ): myfile << "read"; break;
@@ -624,8 +626,10 @@ public:
 		        channel->update_serving_requests(
                   req.addr_vec.data(), -1, clk);
                 }
-                req.callback(req);
-                pending.pop_front();
+                if (req.type == Request::Type::READ || req.type == Request::Type::WRITE) {
+                  req.callback(req);
+                  pending.pop_front();
+               }
             }
         }
         /*** 1.1. Serve completed writes ***/
