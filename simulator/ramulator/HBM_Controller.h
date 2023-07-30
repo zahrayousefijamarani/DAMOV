@@ -547,17 +547,6 @@ public:
         /*** 1. Serve completed reads ***/
         if (pending.size()) {
             Request& req = pending[0];
-
-    
-          
-            
-    
-
-          
-          Expand Down
-    
-    
-  
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
                     (*read_latency_sum) += req.depart - req.arrive + req.hops;
