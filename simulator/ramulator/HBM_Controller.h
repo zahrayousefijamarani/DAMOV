@@ -1,6 +1,5 @@
 #ifndef __HBM_CONTROLLER_H
 #define __HBM_CONTROLLER_H
-
 #include <cassert>
 #include <cstdio>
 #include <deque>
@@ -11,20 +10,15 @@
 #include <unordered_map>
 #include "Controller.h"
 #include "Scheduler.h"
-
 #include "HBM.h"
-
 using namespace std;
-
 namespace ramulator
 {
-
 template <>
 class Controller<HBM>
 {
 public:
     // For counting bandwidth
-
     ScalarStat* read_transaction_bytes;
     ScalarStat* write_transaction_bytes;
     ScalarStat* row_hits;
@@ -36,10 +30,8 @@ public:
     VectorStat* write_row_hits;
     VectorStat* write_row_misses;
     VectorStat* write_row_conflicts;
-
     ScalarStat* read_latency_sum;
     ScalarStat* queueing_latency_sum;
-
     ScalarStat* req_queue_length_sum;
     ScalarStat* read_req_queue_length_sum;
     ScalarStat* write_req_queue_length_sum;
@@ -48,12 +40,10 @@ public:
     ScalarStat pre_energy;
     ScalarStat read_energy;
     ScalarStat write_energy;
-
     ScalarStat act_stdby_energy;
     ScalarStat pre_stdby_energy;
     ScalarStat idle_energy_act;
     ScalarStat idle_energy_pre;
-
     ScalarStat f_act_pd_energy;
     ScalarStat f_pre_pd_energy;
     ScalarStat s_act_pd_energy;
@@ -62,32 +52,25 @@ public:
     ScalarStat sref_ref_energy;
     ScalarStat sref_ref_act_energy;
     ScalarStat sref_ref_pre_energy;
-
     ScalarStat spup_energy;
     ScalarStat spup_ref_energy;
     ScalarStat spup_ref_act_energy;
     ScalarStat spup_ref_pre_energy;
     ScalarStat pup_act_energy;
     ScalarStat pup_pre_energy;
-
     ScalarStat IO_power;
     ScalarStat WR_ODT_power;
     ScalarStat TermRD_power;
     ScalarStat TermWR_power;
-
     ScalarStat read_io_energy;
     ScalarStat write_term_energy;
     ScalarStat read_oterm_energy;
     ScalarStat write_oterm_energy;
     ScalarStat io_term_energy;
-
     ScalarStat ref_energy;
-
     ScalarStat total_energy;
     ScalarStat average_power;
-
     // drampower counter
-
     // Number of activate commands
     ScalarStat numberofacts_s;
     // Number of precharge commands
@@ -132,7 +115,6 @@ public:
     ScalarStat pup_pre_cycles_s;
     // Number of clock cycles in self-refresh power-up mode
     ScalarStat spup_cycles_s;
-
     // Number of active auto-refresh cycles in self-refresh mode
     ScalarStat sref_ref_act_cycles_s;
     // Number of precharged auto-refresh cycles in self-refresh mode
@@ -141,15 +123,12 @@ public:
     ScalarStat spup_ref_act_cycles_s;
     // Number of precharged auto-refresh cycles during self-refresh exit
     ScalarStat spup_ref_pre_cycles_s;
-
     //libDRAMPower* drampower;
     long update_counter = 0;
-
 public:
     /* Member Variables */
     long clk = 0;
     DRAM<HBM>* channel;
-
     Scheduler<HBM>* scheduler;  // determines the highest priority request whose commands will be issued
     RowPolicy<HBM>* rowpolicy;  // determines the row-policy (e.g., closed-row vs. open-row)
     RowTable<HBM>* rowtable;  // tracks metadata about rows (e.g., which are open and for how long)
@@ -157,75 +136,34 @@ public:
 
     struct Queue {
         list<Request> q;
-        list<Request> arrivel_q;
         unsigned int max = 32;
         unsigned int size() {return q.size();}
-        void update(){
-          list<Request> tmp;
-          for (auto& i : arrivel_q) {
-            // assert(i.hops <= MAX_HOP);
-            if(i.hops == 0){
-              q.push_back(i);
-              continue;
-            }
-            i.hops -= 1;
-            tmp.push_back(i);
-          }
-          arrivel_q = tmp;
-        }
-        void arrive(Request& req) {
-            if(req.hops == 0) {
-                q.push_back(req);
-            } else {
-                arrivel_q.push_back(req);
-            }
-        }
     };
 
     Queue readq;  // queue for read requests
+
+    
+          
+            
+    
+
+          
+          Expand Down
+          
+            
+    
+
+          
+          Expand Up
+    
+    @@ -588,6 +609,11 @@ class Controller<HBM>
+  
     Queue writeq;  // queue for write requests
     Queue otherq;  // queue for all "other" requests (e.g., refresh)
-
-        struct PendingQueue {
-        deque<Request> q;
-        deque<Request> arrivel_q;
-        unsigned int size() {return q.size();}
-        void update(){
-          deque<Request> tmp;
-          for (auto& i : arrivel_q) {
-            // assert(i.hops <= MAX_HOP);
-            if(i.hops == 0){
-              q.push_back(i);
-              continue;
-            }
-            i.hops -= 1;
-            tmp.push_back(i);
-          }
-          arrivel_q = tmp;
-        }
-        void arrive(Request& req) {
-            // assert(req.hops <= MAX_HOP);
-            if(req.hops == 0) {
-                q.push_back(req);
-            } else {
-                arrivel_q.push_back(req);
-            }
-        }
-        void push_back(Request& req){
-            if(req.hops == 0) {
-                q.push_back(req);
-            } else {
-                arrivel_q.push_back(req);
-            }
-        }
-        void pop_front(){q.pop_front();}
-    };
-
     deque<Request> pending;  // read requests that are about to receive data from DRAM
     deque<Request> pending_write;  // read requests that are about to receive data from DRAM
     bool write_mode = false;  // whether write requests should be prioritized over reads
     //long refreshed = 0;  // last time refresh requests were generated
-
     /* Command trace for DRAMPower 3.1 */
     string cmd_trace_prefix = "cmd-trace-";
     vector<ofstream> cmd_trace_files;
@@ -233,12 +171,10 @@ public:
     /* Commands to stdout */
     bool print_cmd_trace = false;
     bool with_drampower = false;
-
     // ideal DRAM
     bool no_DRAM_latency = false;
     bool unlimit_bandwidth = false;
     bool pim_mode_enabled = false;
-
     void fake_ideal_DRAM(const Config& configs) {
         if (configs["no_DRAM_latency"] == "true") {
         no_DRAM_latency = true;
@@ -253,7 +189,6 @@ public:
         channel->spec->speed_entry.nCCDL = 1;
         }
     }
-
     /* Constructor */
     Controller(const Config& configs, DRAM<HBM>* channel) :
         channel(channel),
@@ -298,31 +233,26 @@ public:
               .desc("write_energy_" + to_string(channel->id))
               .precision(6)
               ;
-
           act_stdby_energy
               .name("act_stdby_energy_" + to_string(channel->id))
               .desc("act_stdby_energy_" + to_string(channel->id))
               .precision(6)
               ;
-
           pre_stdby_energy
               .name("pre_stdby_energy_" + to_string(channel->id))
               .desc("pre_stdby_energy_" + to_string(channel->id))
               .precision(6)
               ;
-
           idle_energy_act
               .name("idle_energy_act_" + to_string(channel->id))
               .desc("idle_energy_act_" + to_string(channel->id))
               .precision(6)
               ;
-
           idle_energy_pre
               .name("idle_energy_pre_" + to_string(channel->id))
               .desc("idle_energy_pre_" + to_string(channel->id))
               .precision(6)
               ;
-
           f_act_pd_energy
               .name("f_act_pd_energy_" + to_string(channel->id))
               .desc("f_act_pd_energy_" + to_string(channel->id))
@@ -363,7 +293,6 @@ public:
               .desc("sref_ref_pre_energy_" + to_string(channel->id))
               .precision(6)
               ;
-
           spup_energy
               .name("spup_energy_" + to_string(channel->id))
               .desc("spup_energy_" + to_string(channel->id))
@@ -394,7 +323,6 @@ public:
               .desc("pup_pre_energy_" + to_string(channel->id))
               .precision(6)
               ;
-
           IO_power
               .name("IO_power_" + to_string(channel->id))
               .desc("IO_power_" + to_string(channel->id))
@@ -415,7 +343,6 @@ public:
               .desc("TermWR_power_" + to_string(channel->id))
               .precision(6)
               ;
-
           read_io_energy
               .name("read_io_energy_" + to_string(channel->id))
               .desc("read_io_energy_" + to_string(channel->id))
@@ -441,13 +368,11 @@ public:
               .desc("io_term_energy_" + to_string(channel->id))
               .precision(6)
               ;
-
           ref_energy
               .name("ref_energy_" + to_string(channel->id))
               .desc("ref_energy_" + to_string(channel->id))
               .precision(6)
               ;
-
           total_energy
               .name("total_energy_" + to_string(channel->id))
               .desc("total_energy_" + to_string(channel->id))
@@ -458,7 +383,6 @@ public:
               .desc("average_power_" + to_string(channel->id))
               .precision(6)
               ;
-
           numberofacts_s
               .name("numberofacts_s_" + to_string(channel->id))
               .desc("Number of activate commands_" + to_string(channel->id))
@@ -591,7 +515,6 @@ public:
               ;
         }
     }
-
     ~Controller(){
         delete scheduler;
         delete rowpolicy;
@@ -602,11 +525,9 @@ public:
             file.close();
         cmd_trace_files.clear();
     }
-
     void finish(long dram_cycles) {
       channel->finish(dram_cycles);
     }
-
     /* Member Functions */
     Queue& get_queue(Request::Type type)
     {
@@ -616,16 +537,13 @@ public:
             default: return otherq;
         }
     }
-
     bool enqueue(Request& req)
     {
         Queue& queue = get_queue(req.type);
         if (queue.max == queue.size())
             return false;
-
         req.arrive = clk;
-        queue.arrive(req);
-        // queue.q.push_back(req);
+        queue.q.push_back(req);
         // shortcut for read requests, if a write to same addr exists
         // necessary for coherence
         if (req.type == Request::Type::READ && find_if(writeq.q.begin(), writeq.q.end(),
@@ -634,10 +552,8 @@ public:
             pending.push_back(req);
             readq.q.pop_back();
         }
-
         return true;
     }
-
     void tick()
     {
         clk++;
@@ -645,21 +561,27 @@ public:
         (*read_req_queue_length_sum) += readq.size() + pending.size();
         (*write_req_queue_length_sum) += writeq.size();
 
-        readq.update();
-        writeq.update();
-        otherq.update();
-        
-
         /*** 1. Serve completed reads ***/
         if (pending.size()) {
             Request& req = pending[0];
+
+    
+          
+            
+    
+
+          
+          Expand Down
+    
+    
+  
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
-                    (*read_latency_sum) += req.depart - req.arrive; //+ req.hops;
+                    (*read_latency_sum) += req.depart - req.arrive + req.hops;
                     if(false){
                         ofstream myfile;
                         myfile.open ("zahra_read_latency.txt", ios::app);
-                        myfile << req.depart - req.arrive; // + req.hops;
+                        myfile << req.depart - req.arrive + req.hops;
                         myfile << ", ";
                         switch(int(req.type)){
                             case int(Request::Type::READ): myfile << "read"; break;
@@ -703,15 +625,10 @@ public:
 		        channel->update_serving_requests(
                   req.addr_vec.data(), -1, clk);
                 }
-                if (req.type == Request::Type::READ) {
-                        req.callback(req);
-                        pending.pop_front();
-                }
-                // req.callback(req);
-                // pending.pop_front();
+                req.callback(req);
+                pending.pop_front();
             }
         }
-
         /*** 1.1. Serve completed writes ***/
         if (pending_write.size()) {
             Request& req = pending_write[0];
@@ -720,10 +637,8 @@ public:
                 pending_write.pop_front();
             }
         }
-
         /*** 2. Refresh scheduler ***/
         refresh->tick_ref();
-
         /*** 3. Should we schedule writes? ***/
         if (!write_mode) {
             // yes -- write queue is almost full or read queue is empty
@@ -735,12 +650,10 @@ public:
             if (writeq.size() <= int(0.2 * writeq.max) && readq.size() != 0)
                 write_mode = false;
         }
-
         /*** 4. Find the best command to schedule, if any ***/
         Queue* queue = !write_mode ? &readq : &writeq;
         if (otherq.size())
             queue = &otherq;  // "other" requests are rare, so we give them precedence over reads/writes
-
         auto req = scheduler->get_head(queue->q);
         if (req == queue->q.end() || !is_ready(req)) {
           if (!no_DRAM_latency) {
@@ -755,7 +668,6 @@ public:
             return;
           }
         }
-
         if (req->is_first_command) {
             req->is_first_command = false;
             int coreid = req->coreid;
@@ -791,84 +703,67 @@ public:
               (*write_transaction_bytes) += tx;
             }
         }
-
         // issue command on behalf of request
         auto cmd = get_first_cmd(req);
         issue_cmd(cmd, get_addr_vec(cmd, req));
-
         // check whether this is the last command (which finishes the request)
         if (cmd != channel->spec->translate[int(req->type)])
             return;
-
         // set a future completion time for read requests
         if (req->type == Request::Type::READ) {
             req->depart = clk + channel->spec->read_latency;
             pending.push_back(*req);
         }
-
         if (req->type == Request::Type::WRITE) {
             channel->update_serving_requests(req->addr_vec.data(), -1, clk);
             req->depart = clk + channel->spec->write_latency;
             pending_write.push_back(*req);
-
         }
-
         // remove request from queue
         queue->q.erase(req);
     }
-
     bool is_ready(list<Request>::iterator req)
     {
         typename HBM::Command cmd = get_first_cmd(req);
         return channel->check(cmd, req->addr_vec.data(), clk);
     }
-
     bool is_ready(typename HBM::Command cmd, const vector<int>& addr_vec)
     {
         return channel->check(cmd, addr_vec.data(), clk);
     }
-
     bool is_row_hit(list<Request>::iterator req)
     {
         // cmd must be decided by the request type, not the first cmd
         typename HBM::Command cmd = channel->spec->translate[int(req->type)];
         return channel->check_row_hit(cmd, req->addr_vec.data());
     }
-
     bool is_row_hit(typename HBM::Command cmd, const vector<int>& addr_vec)
     {
         return channel->check_row_hit(cmd, addr_vec.data());
     }
-
     bool is_row_open(list<Request>::iterator req)
     {
         // cmd must be decided by the request type, not the first cmd
         typename HBM::Command cmd = channel->spec->translate[int(req->type)];
         return channel->check_row_open(cmd, req->addr_vec.data());
     }
-
     bool is_row_open(typename HBM::Command cmd, const vector<int>& addr_vec)
     {
         return channel->check_row_open(cmd, addr_vec.data());
     }
-
     void update_temp(ALDRAM::Temp current_temperature)
     {
     }
-
     // For telling whether this channel is busying in processing read or write
     bool is_active() {
       return (channel->cur_serving_requests > 0);
     }
-
     // For telling whether this channel is under refresh
     bool is_refresh() {
       return clk <= channel->end_of_refreshing;
     }
-
     void record_core(int coreid) {
     }
-
 private:
     typename HBM::Command get_first_cmd(list<Request>::iterator req)
     {
@@ -879,24 +774,20 @@ private:
           return cmd;
         }
     }
-
     void issue_cmd(typename HBM::Command cmd, const vector<int>& addr_vec)
     {
         assert(is_ready(cmd, addr_vec));
-
         if (with_drampower) {
           int bank_id = addr_vec[int(HBM::Level::Bank)];
           if (channel->spec->standard_name == "DDR4" || channel->spec->standard_name == "GDDR5" || channel->spec->standard_name == "HBM") {
               // if has bankgroup
               bank_id += addr_vec[int(HBM::Level::Bank) - 1] * channel->spec->org_entry.count[int(HBM::Level::Bank)];
           }
-
           update_counter++;
           if (update_counter == 1000000) {
               update_counter = 0;
           }
         }
-
         if (!no_DRAM_latency) {
           channel->update(cmd, addr_vec.data(), clk);
           rowtable->update(cmd, addr_vec, clk);
@@ -931,7 +822,5 @@ private:
         return req->addr_vec;
     }
 };
-
 } /*namespace ramulator*/
-
 #endif /*__HBM_CONTROLLER_H*/
