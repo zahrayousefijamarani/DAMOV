@@ -136,9 +136,31 @@ public:
 
     struct Queue {
         list<Request> q;
-        unsigned int max = 32;
+        list<Request> arrivel_q;
+        unsigned int max = 32; // TODO queue qize
         unsigned int size() {return q.size();}
+        void update(){
+          list<Request> tmp;
+          for (auto& i : arrivel_q) {
+            // assert(i.hops <= MAX_HOP);
+            if(i.hops == 0){
+              q.push_back(i);
+              continue;
+            }
+            i.hops -= 1;
+            tmp.push_back(i);
+          }
+          arrivel_q = tmp;
+        }
+        void arrive(Request& req) {
+            if(req.hops == 0) {
+                q.push_back(req);
+            } else {
+                arrivel_q.push_back(req);
+            }
+        }
     };
+
 
     Queue readq;  // queue for read requests 
     Queue writeq;  // queue for write requests
@@ -526,7 +548,8 @@ public:
         if (queue.max == queue.size())
             return false;
         req.arrive = clk;
-        queue.q.push_back(req);
+        // queue.q.push_back(req);
+        queue.arrive(req);
         // shortcut for read requests, if a write to same addr exists
         // necessary for coherence
         if (req.type == Request::Type::READ && find_if(writeq.q.begin(), writeq.q.end(),
@@ -543,6 +566,10 @@ public:
         (*req_queue_length_sum) += readq.size() + writeq.size() + pending.size();
         (*read_req_queue_length_sum) += readq.size() + pending.size();
         (*write_req_queue_length_sum) += writeq.size();
+
+        readq.update();
+        writeq.update();
+        otherq.update();
 
         /*** 1. Serve completed reads ***/
         if (pending.size()) {
