@@ -807,7 +807,7 @@ public:
         }
 
         if (req->type == Request::Type::WRITE) {
-            // channel->update_serving_requests(req->addr_vec.data(), -1, clk);
+            channel->update_serving_requests(req->addr_vec.data(), -1, clk);
             req->depart = clk + channel->spec->write_latency;
             pending_write.push_back(*req);
 

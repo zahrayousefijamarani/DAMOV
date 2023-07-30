@@ -433,22 +433,24 @@ public:
     }
 
 
-	if(ctrls[req.addr_vec[0]]->enqueue(req)) {
+	// if(ctrls[req.addr_vec[0]]->update_serving_requests(req)) {
+        if(!ctrls[req.addr_vec[int(HMC::Level::Channel)]] ->enqueue(req)){
+            return false;
+        }
             // tally stats here to avoid double counting for requests that aren't enqueued
-            ++num_incoming_requests;
+        ++num_incoming_requests;
 
             if (req.type == Request::Type::READ) {
               ++num_read_requests[coreid];
-
-	      ++incoming_read_reqs_per_channel[req.addr_vec[int(HBM::Level::Channel)]];
+	          ++incoming_read_reqs_per_channel[req.addr_vec[int(HBM::Level::Channel)]];
             }
             if (req.type == Request::Type::WRITE) {
               ++num_write_requests[coreid];
            }
             ++incoming_requests_per_channel[req.addr_vec[int(HBM::Level::Channel)]];
-          return true;
-        }
-        return false;
+        return true;
+        // }
+        // return false;
     }
 
     int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c, bool read){
