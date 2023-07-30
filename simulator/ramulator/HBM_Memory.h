@@ -441,12 +441,12 @@ public:
             if (req.type == Request::Type::READ) {
               ++num_read_requests[coreid];
 
-	      ++incoming_read_reqs_per_channel[req.addr_vec[int(T::Level::Channel)]];
+	      ++incoming_read_reqs_per_channel[req.addr_vec[int(HBM::Level::Channel)]];
             }
             if (req.type == Request::Type::WRITE) {
               ++num_write_requests[coreid];
            }
-            ++incoming_requests_per_channel[req.addr_vec[int(T::Level::Channel)]];
+            ++incoming_requests_per_channel[req.addr_vec[int(HBM::Level::Channel)]];
           return true;
         }
         return false;
