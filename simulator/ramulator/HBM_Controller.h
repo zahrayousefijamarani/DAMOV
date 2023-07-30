@@ -163,7 +163,7 @@ public:
         void update(){
           list<Request> tmp;
           for (auto& i : arrivel_q) {
-            assert(i.hops <= MAX_HOP);
+            // assert(i.hops <= MAX_HOP);
             if(i.hops == 0){
               q.push_back(i);
               continue;
@@ -193,7 +193,7 @@ public:
         void update(){
           deque<Request> tmp;
           for (auto& i : arrivel_q) {
-            assert(i.hops <= MAX_HOP);
+            // assert(i.hops <= MAX_HOP);
             if(i.hops == 0){
               q.push_back(i);
               continue;
@@ -204,7 +204,7 @@ public:
           arrivel_q = tmp;
         }
         void arrive(Request& req) {
-            assert(req.hops <= MAX_HOP);
+            // assert(req.hops <= MAX_HOP);
             if(req.hops == 0) {
                 q.push_back(req);
             } else {
@@ -655,11 +655,11 @@ public:
             Request& req = pending[0];
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
-                    (*read_latency_sum) += req.depart - req.arrive + req.hops;
+                    (*read_latency_sum) += req.depart - req.arrive; //+ req.hops;
                     if(false){
                         ofstream myfile;
                         myfile.open ("zahra_read_latency.txt", ios::app);
-                        myfile << req.depart - req.arrive + req.hops;
+                        myfile << req.depart - req.arrive; // + req.hops;
                         myfile << ", ";
                         switch(int(req.type)){
                             case int(Request::Type::READ): myfile << "read"; break;
@@ -703,9 +703,12 @@ public:
 		        channel->update_serving_requests(
                   req.addr_vec.data(), -1, clk);
                 }
-
-                req.callback(req);
-                pending.pop_front();
+                if (req.type == Request::Type::READ) {
+                        req.callback(req);
+                        pending.pop_front();
+                }
+                // req.callback(req);
+                // pending.pop_front();
             }
         }
 
