@@ -554,12 +554,12 @@ public:
         queue.arrive(req);
         // shortcut for read requests, if a write to same addr exists
         // necessary for coherence
-        if (req.type == Request::Type::READ && find_if(writeq.q.begin(), writeq.q.end(),
-                [req](Request& wreq){ return req.addr == wreq.addr;}) != writeq.q.end()){
-            req.depart = clk + 1;
-            pending.push_back(req);
-            readq.q.pop_back();
-        }
+//        if (req.type == Request::Type::READ && find_if(writeq.q.begin(), writeq.q.end(),
+//                [req](Request& wreq){ return req.addr == wreq.addr && req.coreid == wreq.coreid;}) != writeq.q.end()){
+//            req.depart = clk + 1;
+//            pending.push_back(req);
+//            readq.q.pop_back();
+//cd        }
         return true;
     }
     void tick()

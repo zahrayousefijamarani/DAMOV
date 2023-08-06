@@ -17,7 +17,7 @@ def mkdir_p(directory):
             raise
 
 def create_host_configs_no_prefetch(benchmark, application, function, command, version):
-    number_of_cores = [1, 4, 16, 64, 256]
+    number_of_cores = [1, 4, 8, 16, 32, 64, 256]
 
     for cores in number_of_cores:
         mkdir_p(ROOT+"config_files/host_"+version+"/no_prefetch/"+benchmark+"/"+str(cores)+"/")
@@ -40,7 +40,7 @@ def create_host_configs_no_prefetch(benchmark, application, function, command, v
         ins.close()
 
 def create_host_configs_prefetch(benchmark, application, function, command, version):
-    number_of_cores = [1, 4, 16, 64, 256]
+    number_of_cores = [1, 4, 8, 16, 32, 64, 256]
 
     for cores in number_of_cores:
         mkdir_p(ROOT+"config_files/host_"+version+"/prefetch/"+benchmark+"/"+str(cores)+"/")
@@ -63,7 +63,7 @@ def create_host_configs_prefetch(benchmark, application, function, command, vers
         ins.close()
 
 def create_pim_configs(benchmark, application, function, command, version):
-    number_of_cores = [1, 4, 16, 64, 256]
+    number_of_cores = [1, 4, 8, 16, 32, 64, 256]
 
     for cores in number_of_cores:
         mkdir_p(ROOT+"config_files/pim_"+version+"/"+benchmark+"/"+str(cores)+"/")

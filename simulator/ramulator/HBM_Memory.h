@@ -453,8 +453,8 @@ public:
     }
 
     int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c, bool read){
-        source_p = source_p % 8;
-        destination_p = destination_p % 8;
+        // source_p = source_p % int(HBM::Level::Channel);
+        // destination_p = destination_p % int(HBM::Level::Channel);
         int channel_change_latency = 5;
         channel_change_latency = read? channel_change_latency + 1 : channel_change_latency;
         int bankgroup_change_latency = 0;

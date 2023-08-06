@@ -32,14 +32,14 @@ def get_special_paths(files_paths, keys):
 def run_workloads(pu, file):
     f = open(file, "a")
     for w in workloads:
-        all_files_paths = get_file_paths("config_files/{0}/{1}/16/".format(pu,w))
+        all_files_paths = get_file_paths("config_files/{0}/{1}/64/".format(pu,w))
         for path in all_files_paths:
-            f.write("./build/opt/zsim "+path + "| grep -q \"Max total (aggregate) instructions reached\" \n")
+            f.write("./build/opt/zsim "+path + "\n")
     f.close()
 
 def get_stat_file(pu, file):
     f = open(file, "a")
-    a = get_file_paths("zsim_stats/{0}/16/".format(pu))
+    a = get_file_paths("zsim_stats/{0}/64/".format(pu))
     for p in a:
         if ".out" in p[-4:]:
             f.write("echo \"{},{}\" >> result.txt \n".format(p.split("/")[-1].split(".")[0], pu))
@@ -48,7 +48,7 @@ def get_stat_file(pu, file):
 
 def get_stat_value(pu,file):
     f = open(file, "a")
-    a = get_file_paths("zsim_stats/{0}/16/".format(pu))
+    a = get_file_paths("zsim_stats/{0}/64/".format(pu))
     for p in a:
         if "ramulator.stats" in p:
             f.write("echo \"{},{}\" >> result_latency.txt \n".format(p.split("/")[-1].split(".")[0], pu))
@@ -124,13 +124,13 @@ workloads = ["bwa","chai","darknet" ,"hardware-effects", "hashjoin" , "hpcc", "h
              "parsec", "phoenix",  "polybench", "rodinia", "stream", "splash-2"]
 # run_workloads("host_accelerator/no_prefetch", "run_workloads.sh")
 # run_workloads("host_accelerator/prefetch","run_workloads.sh")
-run_workloads("pim_accelerator","run_workloads.sh")
+run_workloads("pim_accelerator","run_workloads_64.sh")
 
 
 # get_stat_file("host_accelerator/no_prefetch", "get_stat.sh")
 # get_stat_file("host_accelerator/prefetch",  "get_stat.sh")
-get_stat_file("pim_accelerator",  "get_stat.sh")
-get_stat_value("pim_accelerator", "get_stat_latency.sh")
+get_stat_file("pim_accelerator",  "get_stat_64.sh")
+get_stat_value("pim_accelerator", "get_stat_latency_64.sh")
 
 draw_stat_file("result.txt")
 read_value_result_file("result_latency.txt")
