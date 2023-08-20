@@ -7,12 +7,10 @@
 #include <map>
 #include <string>
 #include <functional>
-#define NETWORK_WIDTH 6
-#define NETWORK_HEIGHT 6
-#define WRITE_LENGTH 5
-#define READ_LENGTH 6
+#define DATA_LENGTH 5
+#define WRITE_LENGTH DATA_LENGTH
+#define READ_LENGTH (DATA_LENGTH+1)
 #define OTHER_LENGTH 1
-#define MAX_HOP (NETWORK_WIDTH+NETWORK_HEIGHT)*READ_LENGTH
 
 #ifndef DEBUG_HMC
 #define debug_hmc(...)
@@ -173,6 +171,12 @@ public:
       HMC_4GB_va256,
       HMC_4GB_va512,
       HMC_4GB_va1024,
+      HMC_8GB_va64,
+      HMC_16GB_va128,
+      HMC_32GB_va256,
+      HMC_2GB_va16,
+      HMC_512MB_va4,
+      HMC_128MB_va1,
       MAX
     };
 
@@ -193,6 +197,12 @@ public:
         {32<<10, 32, {256, 4, 2, 1<<13, 1<<6}},
         {32<<10, 32, {512, 4, 2, 1<<12, 1<<6}},
         {32<<10, 32, {1024, 4, 2, 1<<11, 1<<6}},
+        {32<<10, 32, {64, 4, 2, 1<<16, 1<<6}},
+        {32<<10, 32, {128, 4, 2, 1<<16, 1<<6}},
+        {32<<10, 32, {256, 4, 2, 1<<16, 1<<6}},
+        {32<<10, 32, {16, 4, 2, 1<<16, 1<<6}},
+        {32<<10, 32, {4, 4, 2, 1<<16, 1<<6}},
+        {32<<10, 32, {1, 4, 2, 1<<16, 1<<6}},
     }, org_entry;
 
     /* Speed */
