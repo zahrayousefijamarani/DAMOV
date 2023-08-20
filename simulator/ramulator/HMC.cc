@@ -11,7 +11,8 @@ string HMC::standard_name = "HMC";
 const int bytes_per_flit = 16;
 
 map<string, enum HMC::Org> HMC::org_map = {
-    {"HMC_4GB", HMC::Org::HMC_4GB}, {"HMC_8GB", HMC::Org::HMC_8GB},
+    {"HMC_4GB", HMC::Org::HMC_4GB},
+    {"HMC_8GB", HMC::Org::HMC_8GB},
     {"HMC_4GB_bank16", HMC::Org::HMC_4GB_bank16},
     {"HMC_4GB_bank32", HMC::Org::HMC_4GB_bank32},
     {"HMC_4GB_bank64", HMC::Org::HMC_4GB_bank64},
@@ -21,7 +22,13 @@ map<string, enum HMC::Org> HMC::org_map = {
     {"HMC_4GB_va128", HMC::Org::HMC_4GB_va128},
     {"HMC_4GB_va256", HMC::Org::HMC_4GB_va256},
     {"HMC_4GB_va512", HMC::Org::HMC_4GB_va512},
-    {"HMC_4GB_va1024", HMC::Org::HMC_4GB_va1024}
+    {"HMC_4GB_va1024", HMC::Org::HMC_4GB_va1024},
+    {"HMC_8GB_va64", HMC::Org::HMC_8GB_va64},
+    {"HMC_16GB_va128", HMC::Org::HMC_16GB_va128},
+    {"HMC_32GB_va256", HMC::Org::HMC_32GB_va256},
+    {"HMC_2GB_va16", HMC::Org::HMC_2GB_va16},
+    {"HMC_512MB_va4", HMC::Org::HMC_512MB_va4},
+    {"HMC_128MB_va1", HMC::Org::HMC_128MB_va1},
 };
 
 map<string, enum HMC::Speed> HMC::speed_map = {
