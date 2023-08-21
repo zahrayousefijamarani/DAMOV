@@ -5,10 +5,12 @@
 #include <cstdio>
 #include <deque>
 #include <fstream>
+#include <iostream>
 #include <list>
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <functional>
 #include "Controller.h"
 #include "Scheduler.h"
 
@@ -165,17 +167,37 @@ public:
     RowPolicy<HMC>* rowpolicy;  // determines the row-policy (e.g., closed-row vs. open-row)
     RowTable<HMC>* rowtable;  // tracks metadata about rows (e.g., which are open and for how long)
     Refresh<HMC>* refresh;
+    long long total_hmc_latency = 0;
+    long long total_latency = 0;
+    long long total_transfer_latency = 0;
+    long long total_in_memory_latency = 0;
+    long long total_cycle_waiting_not_ready_request = 0;
+    long long total_process_latency = 0;
+    long long total_incoming_queuing_latency = 0;
+    long long total_outgoing_queuing_latency = 0;
+    long long total_bursts = 0;
+    long long stalled_cycles = 0;
+    function<void(const Request&)> update_parent_with_latency;
 
     struct Queue {
         list<Request> q;
         list<Request> arrivel_q;
+        size_t max_q_size = 0;
+        size_t max_arrivel_size = 0;
+        long total_pending_task = 0;
         unsigned int max = 32; // TODO queue qize
-        unsigned int size() {return q.size();}
-        void update(){
+        void set_max(int max) {
+          this -> max = max;
+          cout << "Queue size is: " << this -> max << endl;
+        }
+        unsigned int size() {return arrivel_q.size() + q.size();}
+        void update(long clk){
           list<Request> tmp;
           for (auto& i : arrivel_q) {
-            assert(i.hops <= MAX_HOP);
             if(i.hops == 0){
+              total_pending_task+=q.size();
+              i.finish_transfer = clk;
+              assert(i.finish_transfer >= i.arrive_hmc);
               q.push_back(i);
               continue;
             }
@@ -183,9 +205,16 @@ public:
             tmp.push_back(i);
           }
           arrivel_q = tmp;
+          if(q.size() > max_q_size) {
+            max_q_size = q.size();
+          }
+          if(arrivel_q.size() > max_arrivel_size) {
+            max_arrivel_size = arrivel_q.size();
+          }
         }
         void arrive(Request& req) {
             if(req.hops == 0) {
+                req.finish_transfer = req.arrive;
                 q.push_back(req);
             } else {
                 arrivel_q.push_back(req);
@@ -198,41 +227,8 @@ public:
     Queue otherq;  // queue for all "other" requests (e.g., refresh)
     Queue overflow;
 
-    struct PendingQueue {
-        deque<Request> q;
-        deque<Request> arrivel_q;
-        unsigned int size() {return q.size();}
-        void update(){
-          deque<Request> tmp;
-          for (auto& i : arrivel_q) {
-            assert(i.hops <= MAX_HOP);
-            if(i.hops == 0){
-              q.push_back(i);
-              continue;
-            }
-            i.hops -= 1;
-            tmp.push_back(i);
-          }
-          arrivel_q = tmp;
-        }
-        void arrive(Request& req) {
-            assert(req.hops <= MAX_HOP);
-            if(req.hops == 0) {
-                q.push_back(req);
-            } else {
-                arrivel_q.push_back(req);
-            }
-        }
-        void push_back(Request& req){
-            if(req.hops == 0) {
-                q.push_back(req);
-            } else {
-                arrivel_q.push_back(req);
-            }
-        }
-        void pop_front(){q.pop_front();}
-    };
-
+    long total_pending_finished_task = 0;
+    long total_pending_write_finished_task = 0;
     deque<Request> pending;  // read requests that are about to receive data from DRAM
     deque<Request> pending_write;  //write requests that are about to receive data from DRAM
 
@@ -292,6 +288,13 @@ public:
           assert(channel->spec->read_latency == channel->spec->speed_entry.nCL);
           assert(channel->spec->speed_entry.nCCDS == 1);
           assert(channel->spec->speed_entry.nCCDL == 1);
+        }
+
+        if (configs.contains("hmc_queue_size")) {
+          readq.set_max(stoi(configs["hmc_queue_size"]));
+          writeq.set_max(stoi(configs["hmc_queue_size"]));
+          otherq.set_max(stoi(configs["hmc_queue_size"]));
+          overflow.set_max(stoi(configs["hmc_queue_size"]));
         }
 
         pim_mode_enabled = configs.pim_mode_enabled();
@@ -675,14 +678,19 @@ public:
         }
 
         req.arrive = clk;
-        queue.arrive(req);
+
         // shortcut for read requests, if a write to same addr exists
         // necessary for coherence
         if (req.type == Request::Type::READ && find_if(writeq.q.begin(), writeq.q.end(),
                 [req](Request& wreq){ return req.addr == wreq.addr && req.coreid == wreq.coreid;}) != writeq.q.end()){
             req.depart = clk + 1;
+            total_pending_finished_task += pending.size();
+            req.finish_queuing = clk;
+            req.finish_transfer = clk;
             pending.push_back(req);
-            readq.q.pop_back();
+            req.served_without_hops = 1;
+        } else {
+            queue.arrive(req);
         }
 
         return true;
@@ -726,57 +734,48 @@ public:
         (*write_req_queue_length_sum) += writeq.size();
 
 
-        readq.update();
-        writeq.update();
-        otherq.update();
+        readq.update(clk);
+        writeq.update(clk);
+        otherq.update(clk);
         /*** 1. Serve completed reads ***/
         if (pending.size()) {
           Request& req = pending[0];
           if (req.depart <= clk) {
             if (req.depart - req.arrive > 1) {
               channel->update_serving_requests(req.addr_vec.data(), -1, clk);
-              ofstream myfile;
-            myfile.open ("zahra_read_latency_hmc.txt", ios::app);
-            if(pim_mode_enabled){
-                req.depart_hmc = clk;
-            }
-            myfile << req.depart_hmc - req.arrive_hmc;
-            myfile << ", ";
-            myfile << req.depart - req.arrive;
-            myfile << ", ";
-            switch(int(req.type)){
-                case int(Request::Type::READ): myfile << "read"; break;
-                case int(Request::Type::WRITE): myfile << "write"; break;
-                case int(Request::Type::REFRESH): myfile << "refresh"; break;
-                case int(Request::Type::POWERDOWN) : myfile << "powerdown"; break;
-                case int(Request::Type::SELFREFRESH) : myfile << "selfrefresh"; break;
-                case int(Request::Type::EXTENSION): myfile << "extension"; break;
-                case int(Request::Type::MAX): myfile << "max"; break;
-            }
-            myfile << ", ";
-            myfile << req.addr;
-            myfile << ", ";
-            myfile << "HMC";
-            myfile << ", destination vault: ";
-            myfile << req.addr_vec[int(HMC::Level::Vault)];
-            myfile << ", source vault: ";
-            myfile << req.coreid;
-            myfile << ", hops: ";
-            myfile << req.hops;
-            myfile << ", bank:"; 
-            myfile << req.addr_vec[int(HMC::Level::Bank)];
-            myfile << ", bankgroup";
-            myfile << req.addr_vec[int(HMC::Level::BankGroup)];
-            myfile << ", column:"; 
-            myfile << req.addr_vec[int(HMC::Level::Column)];
-            myfile << ", row:"; 
-            myfile << req.addr_vec[int(HMC::Level::Row)];
-            myfile << "\n";
-            myfile.close();  
             }
 
             if(pim_mode_enabled){
                 req.depart_hmc = clk;
+                assert(req.arrive_hmc <= clk);
+                assert(req.arrive_hmc >= 0);
+                assert(req.depart_hmc <= clk);
+                assert(req.depart_hmc >= 0);
+                assert(req.arrive <= clk);
+                assert(req.arrive >= 0);
+                assert(req.depart <= clk);
+                assert(req.depart >= 0);
+                total_hmc_latency += (req.depart_hmc - req.arrive_hmc);
+                total_latency += (req.depart - req.arrive);
+                assert(req.finish_transfer >= 0);
+                assert(req.finish_transfer <= clk);
+                assert(req.finish_queuing >= 0);
+                assert(req.finish_queuing <= clk);
+                total_transfer_latency += (req.finish_transfer - req.arrive);
+                total_in_memory_latency += (req.depart - req.finish_transfer);
+                total_process_latency += (req.depart - req.finish_queuing);
+                total_incoming_queuing_latency += (req.finish_queuing - req.finish_transfer);
+                total_outgoing_queuing_latency += (req.depart_hmc - req.depart);
+                assert(total_hmc_latency >= 0);
+                assert(total_latency >= 0);
+                assert(total_transfer_latency >= 0);
+                assert(total_in_memory_latency >= 0);
+                assert(total_process_latency >= 0);
+                assert(total_outgoing_queuing_latency >= 0);
+                assert(total_incoming_queuing_latency >= 0);
+                if(update_parent_with_latency) {
+                    update_parent_with_latency(req);
+                }
                 if (req.type == Request::Type::READ || req.type == Request::Type::WRITE) {
                   req.callback(req);
                   pending.pop_front();
@@ -787,9 +786,6 @@ public:
                 response_packets_buffer.push_back(packet);
                 pending.pop_front();
             }
-
-            
-
           }
         }
 
@@ -800,22 +796,30 @@ public:
         /*** 3. Should we schedule writes? ***/
         if (!write_mode) {
             // yes -- write queue is almost full or read queue is empty
-            if (writeq.size() >= int(0.8 * writeq.max) || readq.size() == 0)
+            if ((writeq.size() >= int(0.8 * writeq.max) && writeq.q.size() > 0) || readq.size() == 0){
                 write_mode = true;
+            } 
         }
         else {
             // no -- write queue is almost empty and read queue is not empty
-            if (writeq.size() <= int(0.2 * writeq.max) && readq.size() != 0)
+            if ((writeq.size() <= int(0.2 * writeq.max) || writeq.q.size() == 0) && readq.size() != 0) {
                 write_mode = false;
+            }
+
         }
 
         /*** 4. Find the best command to schedule, if any ***/
         Queue* queue = !write_mode ? &readq : &writeq;
-        if (otherq.size())
+        if (otherq.q.size())
             queue = &otherq;  // "other" requests are rare, so we give them precedence over reads/writes
 
         auto req = scheduler->get_head(queue->q);
         if (req == queue->q.end() || !is_ready(req)) {
+            if(req != queue->q.end()) {
+                if(!is_ready(req)) {
+                    total_cycle_waiting_not_ready_request++;
+                }
+            }
           if (!no_DRAM_latency) {
             // we couldn't find a command to schedule -- let's try to be speculative
             auto cmd = HMC::Command::PRE;
@@ -828,8 +832,9 @@ public:
             return;
           }
         }
-
         if (req->is_first_command) {
+          req->finish_queuing = clk;
+          total_bursts += req->burst_count;
           req->is_first_command = false;
           int coreid = req->coreid;
           if (req->type == Request::Type::READ || req->type == Request::Type::WRITE) {
@@ -872,6 +877,7 @@ public:
 
         // check whether this is the last command (which finishes the request)
         if (cmd != channel->spec->translate[int(req->type)]){
+            stalled_cycles++;
             return;
         }
 
@@ -881,6 +887,7 @@ public:
             if (req->burst_count == 0) {
               req->depart = clk + channel->spec->read_latency;
               debug_hmc("req->depart: %ld\n", req->depart);
+              total_pending_finished_task += pending.size();
               pending.push_back(*req);
             }
         } else if (req->type == Request::Type::WRITE) {
@@ -888,8 +895,10 @@ public:
 
             if (req->burst_count == 0) {
               req->depart = clk + channel->spec->write_latency;
+              total_pending_finished_task += pending.size();
               pending.push_back(*req);
               /*if(pim_mode_enabled){
+                total_pending_finished_task += pending.size();
                 pending.push_back(*req);
               }
               else{
@@ -972,6 +981,10 @@ public:
       (*record_write_hits)[coreid] = (*write_row_hits)[coreid];
       (*record_write_misses)[coreid] = (*write_row_misses)[coreid];
       (*record_write_conflicts)[coreid] = (*write_row_conflicts)[coreid];
+    }
+
+    void attach_parent_update_latency_function(function<void(const Request&)> partent_function) {
+        update_parent_with_latency = partent_function;
     }
 
 private:
