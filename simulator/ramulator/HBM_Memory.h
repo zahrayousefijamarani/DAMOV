@@ -47,8 +47,10 @@ protected:
   VectorStat write_row_conflicts;
 
   ScalarStat read_latency_avg;
+  ScalarStat read_network_latency_avg;
   ScalarStat read_latency_ns_avg;
   ScalarStat read_latency_sum;
+  ScalarStat read_network_latency_sum;
   ScalarStat queueing_latency_avg;
   ScalarStat queueing_latency_ns_avg;
   ScalarStat queueing_latency_sum;
@@ -284,9 +286,19 @@ public:
             .desc("The memory latency cycles (in memory time domain) sum for all read requests in this channel")
             .precision(0)
             ;
+        read_network_latency_sum
+            .name("read_network_latency_sum")
+            .desc("The memory network latency cycles (in memory time domain) sum for all read requests in this channel")
+            .precision(0)
+            ;
         read_latency_avg
             .name("read_latency_avg")
             .desc("The average memory latency cycles (in memory time domain) per request for all read requests in this channel")
+            .precision(6)
+            ;
+        read_network_latency_avg
+            .name("read_network_latency_avg")
+            .desc("The average memory network latency cycles (in memory time domain) per request for all read requests in this channel")
             .precision(6)
             ;
         queueing_latency_sum
@@ -358,6 +370,7 @@ public:
           ctrl->write_row_conflicts = &write_row_conflicts;
 
           ctrl->read_latency_sum = &read_latency_sum;
+          ctrl->read_network_latency_sum = &read_network_latency_sum;
           ctrl->queueing_latency_sum = &queueing_latency_sum;
 
           ctrl->req_queue_length_sum = &req_queue_length_sum;
@@ -430,6 +443,10 @@ public:
     if(pim_mode_enabled )
     {          
         req.hops = calculate_extra_movement_latency(req.coreid, req.childid, req.addr_vec[int(HBM::Level::Channel)], req.addr_vec[int(HBM::Level::BankGroup)], req.type == Request::Type::READ);
+        if(req.type == Request::Type::READ)
+        {
+            read_network_latency_sum += req.hops;
+        }
     }
 
 
@@ -482,6 +499,7 @@ public:
       read_bandwidth = read_transaction_bytes.value() * 1e9 / (dram_cycles * clk_ns());
       write_bandwidth = write_transaction_bytes.value() * 1e9 / (dram_cycles * clk_ns());
       read_latency_avg = read_latency_sum.value() / total_read_req;
+      read_network_latency_avg = read_network_latency_sum.value() / total_read_req;
       queueing_latency_avg = queueing_latency_sum.value() / total_read_req;
       read_latency_ns_avg = read_latency_avg.value() * clk_ns();
       queueing_latency_ns_avg = queueing_latency_avg.value() * clk_ns();
