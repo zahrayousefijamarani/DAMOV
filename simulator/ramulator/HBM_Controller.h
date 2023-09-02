@@ -140,12 +140,12 @@ public:
         list<Request> arrivel_q;
         unsigned int max = 32; // TODO queue qize
         unsigned int size() {return q.size();}
-        void update(){
+        void update(long clk){
           list<Request> tmp;
           for (auto& i : arrivel_q) {
             // assert(i.hops <= MAX_HOP);
             if(i.hops == 0){
-              req.arrive_q_hbm = clk;
+              i.arrive_q_hbm = clk;
               q.push_back(i);
               continue;
             }
@@ -154,7 +154,7 @@ public:
           }
           arrivel_q = tmp;
         }
-        void arrive(Request& req) {
+        void arrive(Request& req, long clk) {
             if(req.hops == 0) {
                 req.arrive_q_hbm = clk;
                 q.push_back(req);
@@ -554,7 +554,7 @@ public:
             return false;
         req.arrive = clk;
         // queue.q.push_back(req);
-        queue.arrive(req);
+        queue.arrive(req,clk);
         // shortcut for read requests, if a write to same addr exists
         // necessary for coherence
 //        if (req.type == Request::Type::READ && find_if(writeq.q.begin(), writeq.q.end(),
@@ -572,9 +572,9 @@ public:
         (*read_req_queue_length_sum) += readq.size() + pending.size();
         (*write_req_queue_length_sum) += writeq.size();
 
-        readq.update();
-        writeq.update();
-        otherq.update();
+        readq.update(clk);
+        writeq.update(clk);
+        otherq.update(clk);
 
         /*** 1. Serve completed reads ***/
         if (pending.size()) {
