@@ -37,6 +37,7 @@ public:
     long depart;
     long arrive_hmc;
     long depart_hmc;
+    long arrive_q_hbm;
     long finish_transfer;	
     long finish_queuing;
     unsigned hops = 0;

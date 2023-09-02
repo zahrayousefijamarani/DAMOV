@@ -31,6 +31,7 @@ public:
     VectorStat* write_row_misses;
     VectorStat* write_row_conflicts;
     ScalarStat* read_latency_sum;
+    ScalarStat* read_queue_latency_sum;
     ScalarStat* queueing_latency_sum;
     ScalarStat* req_queue_length_sum;
     ScalarStat* read_req_queue_length_sum;
@@ -144,6 +145,7 @@ public:
           for (auto& i : arrivel_q) {
             // assert(i.hops <= MAX_HOP);
             if(i.hops == 0){
+              req.arrive_q_hbm = clk;
               q.push_back(i);
               continue;
             }
@@ -154,6 +156,7 @@ public:
         }
         void arrive(Request& req) {
             if(req.hops == 0) {
+                req.arrive_q_hbm = clk;
                 q.push_back(req);
             } else {
                 arrivel_q.push_back(req);
@@ -579,6 +582,8 @@ public:
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
                     (*read_latency_sum) += req.depart - req.arrive;// + req.hops;
+                    (*read_queue_latency_sum) += req.depart - req.arrive_q_hbm; 
+                    
                     if(false){
                         ofstream myfile;
                         myfile.open ("zahra_read_latency.txt", ios::app);

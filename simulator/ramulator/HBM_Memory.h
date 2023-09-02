@@ -51,6 +51,8 @@ protected:
   ScalarStat read_latency_ns_avg;
   ScalarStat read_latency_sum;
   ScalarStat read_network_latency_sum;
+  ScalarStat read_queue_latency_sum;
+  ScalarStat read_queue_latency_avg;
   ScalarStat queueing_latency_avg;
   ScalarStat queueing_latency_ns_avg;
   ScalarStat queueing_latency_sum;
@@ -288,7 +290,17 @@ public:
             ;
         read_network_latency_sum
             .name("read_network_latency_sum")
-            .desc("The memory network latency cycles (in memory time domain) sum for all read requests in this channel")
+            .desc("The read memory network latency cycles (in memory time domain) sum for all read requests in this channel")
+            .precision(0)
+            ;
+        read_queue_latency_sum
+            .name("read_queue_latency_sum")
+            .desc("The read memory queue latency cycles (in memory time domain) sum for all read requests in this channel")
+            .precision(0)
+            ;
+        read_queue_latency_avg
+            .name("read_queue_latency_avg")
+            .desc("The read memory queue latency cycles (in memory time domain) sum for all read requests in this channel")
             .precision(0)
             ;
         read_latency_avg
@@ -370,7 +382,7 @@ public:
           ctrl->write_row_conflicts = &write_row_conflicts;
 
           ctrl->read_latency_sum = &read_latency_sum;
-          ctrl->read_network_latency_sum = &read_network_latency_sum;
+          ctrl->read_queue_latency_sum = &read_queue_latency_sum;
           ctrl->queueing_latency_sum = &queueing_latency_sum;
 
           ctrl->req_queue_length_sum = &req_queue_length_sum;
@@ -500,6 +512,7 @@ public:
       write_bandwidth = write_transaction_bytes.value() * 1e9 / (dram_cycles * clk_ns());
       read_latency_avg = read_latency_sum.value() / total_read_req;
       read_network_latency_avg = read_network_latency_sum.value() / total_read_req;
+      read_queue_latency_avg = read_queue_latency_sum.value() / total_read_req;
       queueing_latency_avg = queueing_latency_sum.value() / total_read_req;
       read_latency_ns_avg = read_latency_avg.value() * clk_ns();
       queueing_latency_ns_avg = queueing_latency_avg.value() * clk_ns();
