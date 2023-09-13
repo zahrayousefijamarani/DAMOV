@@ -582,7 +582,7 @@ public:
             if (req.depart <= clk) {
                 if (req.depart - req.arrive > 1) { // this request really accessed a row (when a read accesses the same address of a previous write, it directly returns. See how this is handled in enqueue function)
                     (*read_latency_sum) += req.depart - req.arrive;// + req.hops;
-                    (*read_queue_latency_sum) += req.depart - req.arrive_q_hbm; 
+                    // (*read_queue_latency_sum) += req.depart - req.arrive_q_hbm; 
                     
                     if(false){
                         ofstream myfile;
@@ -686,6 +686,7 @@ public:
             int tx = (channel->spec->prefetch_size * channel->spec->channel_width / 8) * req->burst_count; // req->burst_count is the initial value because req->is_first_command is true
             if (req->type == Request::Type::READ) {
                 (*queueing_latency_sum) += clk - req->arrive;
+                (*read_queue_latency_sum) += clk - req.arrive_q_hbm;
                 if (is_row_hit(req)) {
                     ++(*read_row_hits)[coreid];
                     ++(*row_hits);
