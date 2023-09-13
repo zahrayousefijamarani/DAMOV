@@ -686,7 +686,7 @@ public:
             int tx = (channel->spec->prefetch_size * channel->spec->channel_width / 8) * req->burst_count; // req->burst_count is the initial value because req->is_first_command is true
             if (req->type == Request::Type::READ) {
                 (*queueing_latency_sum) += clk - req->arrive;
-                (*read_queue_latency_sum) += clk - req.arrive_q_hbm;
+                (*read_queue_latency_sum) += clk - req->arrive_q_hbm; 
                 if (is_row_hit(req)) {
                     ++(*read_row_hits)[coreid];
                     ++(*row_hits);
