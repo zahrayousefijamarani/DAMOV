@@ -69,10 +69,12 @@ protected:
   long max_address;
 public:
     struct AddressAccCountEntry{
+          int column;
+          int row;
+          int bank;
           int ctrl;
-          long addr;
           AddressAccCountEntry(){}
-          AddressAccCountEntry(int ctrl, long addr):ctrl(ctrl),addr(addr){}
+          AddressAccCountEntry(int ctrl, int column, int row, int bank):ctrl(ctrl),column(column), row(row), bank(bank){}
     };
     vector<AddressAccCountEntry> addressAccCountTable;
     bool pim_mode_enabled = false;
@@ -432,12 +434,12 @@ public:
         }
         if (int(num_dram_cycles.value()) % 10000 == 0 && num_dram_cycles.value() !=0){
             std::ofstream output_file("sub_count.txt");
-            // for (AddressAccCountEntry &e : addressAccCountTable) output_file << e.addr << "," << int(e.ctrl) << "\n";
+            for (AddressAccCountEntry &e : addressAccCountTable) output_file << e.ctrl << ", " << e.bank << "," << e.column << ", " << e.row << "\n";
             // std::ostream_iterator<std::string> output_iterator(output_file, "\n");
             // std::copy(addressAccCountTable.begin(), addressAccCountTable.end(), output_iterator);
-            for (AddressAccCountEntry i = addressAccCountTable.begin(); i != addressAccCountTable.end(); ++i){
-                output_file << i->addr << "," << int(i->ctrl) << "\n";
-            }
+            // for (AddressAccCountEntry i = addressAccCountTable.begin(); i != addressAccCountTable.end(); ++i){
+                // output_file << i->addr << "," << int(i->ctrl) << "\n";
+            // }
             output_file.close();
                
         }
@@ -504,7 +506,7 @@ public:
     }
 
     void addressAccCountTable_insert(Request req){
-        addressAccCountTable.push_back(AddressAccCountEntry(req.addr_vec[int(HBM::Level::Channel)], req.addr));
+        addressAccCountTable.push_back(AddressAccCountEntry(req.addr_vec[int(HBM::Level::Channel)], req.addr_vec[int(HBM::Level::Column)], req.addr_vec[int(HBM::Level::Row)], req.addr_vec[int(HBM::Level::Bank)]*req.addr_vec[int(HBM::Level::BankGroup)]));
     }
 
     int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c, bool read){
