@@ -9,6 +9,8 @@
 #include <array>
 #include <climits>
 #include <bitset>
+#include <iterator>
+#include <string>
 
 using namespace std;
 
@@ -500,7 +502,7 @@ public:
     }
 
     void addressAccCountTable_insert(Request req){
-        addressAccCountTable.push_back(AddressAccCountEntry(req.addr_vec[int(HBM::Level::Channel)], req.addr))
+        addressAccCountTable.push_back(AddressAccCountEntry(req.addr_vec[int(HBM::Level::Channel)], req.addr));
     }
 
     int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c, bool read){
