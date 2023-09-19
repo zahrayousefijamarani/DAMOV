@@ -433,8 +433,9 @@ public:
           ramulator_active_cycles++;
         }
         if (int(num_dram_cycles.value()) % 10000 == 0 && num_dram_cycles.value() !=0){
-            std::ofstream output_file("sub_count.txt");
+            std::ofstream output_file("sub_count.txt", std::ios_base::app);
             for (AddressAccCountEntry &e : addressAccCountTable) output_file << e.ctrl << ", " << e.bank << "," << e.column << ", " << e.row << "\n";
+            addressAccCountTable.clear();
             // std::ostream_iterator<std::string> output_iterator(output_file, "\n");
             // std::copy(addressAccCountTable.begin(), addressAccCountTable.end(), output_iterator);
             // for (AddressAccCountEntry i = addressAccCountTable.begin(); i != addressAccCountTable.end(); ++i){
