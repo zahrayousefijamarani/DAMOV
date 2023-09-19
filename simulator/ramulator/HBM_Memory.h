@@ -432,8 +432,9 @@ public:
         }
         if (num_dram_cycles % 10000 == 0 && num_dram_cycles !=0){
             std::ofstream output_file("sub_count.txt");
-            std::ostream_iterator<std::string> output_iterator(output_file, "\n");
-            std::copy(addressAccCountTable.begin(), addressAccCountTable.end(), output_iterator);
+            for (AddressAccCountEntry &e : addressAccCountTable) output_file << e.addr << "," << e.ctrl << "\n";
+            // std::ostream_iterator<std::string> output_iterator(output_file, "\n");
+            // std::copy(addressAccCountTable.begin(), addressAccCountTable.end(), output_iterator);
             // for (auto i = addressAccCountTable.begin(); i != addressAccCountTable.end(); ++i){
                 
             // }
