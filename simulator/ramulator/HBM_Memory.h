@@ -430,7 +430,7 @@ public:
         if (is_active) {
           ramulator_active_cycles++;
         }
-        if (num_dram_cycles.value() % 10000 == 0 && num_dram_cycles.value() !=0){
+        if (int(num_dram_cycles.value()) % 10000 == 0 && num_dram_cycles.value() !=0){
             std::ofstream output_file("sub_count.txt");
             for (AddressAccCountEntry &e : addressAccCountTable) output_file << e.addr << "," << e.ctrl << "\n";
             // std::ostream_iterator<std::string> output_iterator(output_file, "\n");
