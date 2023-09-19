@@ -69,6 +69,7 @@ public:
     struct AddressAccCountEntry{
           uint8_t ctrl;
           long addr;
+          AddressAccCountEntry(){}
           AddressAccCountEntry(uint8_t ctrl, long addr):ctrl(ctrl),addr(addr){}
     };
     vector<AddressAccCountEntry> addressAccCountTable;
@@ -468,19 +469,19 @@ public:
         }
 
 
-    if(pim_mode_enabled )
-    {          
-        req.hops = calculate_extra_movement_latency(req.coreid, req.childid, req.addr_vec[int(HBM::Level::Channel)], req.addr_vec[int(HBM::Level::BankGroup)], req.type == Request::Type::READ);
-        if(req.type == Request::Type::READ)
-        {
-            read_network_latency_sum += req.hops;
+        if(pim_mode_enabled )
+        {          
+            req.hops = calculate_extra_movement_latency(req.coreid, req.childid, req.addr_vec[int(HBM::Level::Channel)], req.addr_vec[int(HBM::Level::BankGroup)], req.type == Request::Type::READ);
+            if(req.type == Request::Type::READ)
+            {
+                read_network_latency_sum += req.hops;
+            }
+            addressAccCountTable_insert(req);
         }
-        addressAccCountTable_insert(req);
-    }
 
 
 	// if(ctrls[req.addr_vec[0]]->update_serving_requests(req)) {
-    if(ctrls[req.addr_vec[0]]->enqueue(req)) {
+        if(ctrls[req.addr_vec[0]]->enqueue(req)) {
             // tally stats here to avoid double counting for requests that aren't enqueued
             ++num_incoming_requests;
 
@@ -499,7 +500,7 @@ public:
     }
 
     void addressAccCountTable_insert(Request req){
-        addressAccCountTable.push_back(AddressAccCountTable(req.addr_vec[int(HBM::Level::Channel)], req.addr))
+        addressAccCountTable.push_back(AddressAccCountEntry(req.addr_vec[int(HBM::Level::Channel)], req.addr))
     }
 
     int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c, bool read){
