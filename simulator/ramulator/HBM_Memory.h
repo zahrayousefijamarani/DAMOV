@@ -66,6 +66,12 @@ protected:
 
   long max_address;
 public:
+    struct AddressAccCountEntry{
+          uint8_t ctrl;
+          long addr;
+          AddressAccCountEntry(uint8_t ctrl, long addr):ctrl(ctrl),addr(addr){}
+    };
+    vector<AddressAccCountEntry> addressAccCountTable;
     bool pim_mode_enabled = false;
     bool network_overhead = false;
     enum class Type {
@@ -421,6 +427,16 @@ public:
         if (is_active) {
           ramulator_active_cycles++;
         }
+        if (num_dram_cycles % 10000 == 0 && num_dram_cycles !=0){
+            std::ofstream output_file("sub_count.txt");
+            std::ostream_iterator<std::string> output_iterator(output_file, "\n");
+            std::copy(addressAccCountTable.begin(), addressAccCountTable.end(), output_iterator);
+            // for (auto i = addressAccCountTable.begin(); i != addressAccCountTable.end(); ++i){
+                
+            // }
+               
+        }
+
     }
 
     void set_address_recorder () {}
@@ -459,6 +475,7 @@ public:
         {
             read_network_latency_sum += req.hops;
         }
+        addressAccCountTable_insert(req);
     }
 
 
@@ -479,6 +496,10 @@ public:
           return true;
         }
         return false;
+    }
+
+    void addressAccCountTable_insert(Request req){
+        addressAccCountTable.push_back(AddressAccCountTable(req.addr_vec[int(HBM::Level::Channel)], req.addr))
     }
 
     int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c, bool read){

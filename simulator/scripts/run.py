@@ -132,7 +132,7 @@ def print_value_file_whole_number(file, value):
     return x, y
 
 
-core_number = 16
+core_number = 64
 
 
 workloads = ["bwa","chai","darknet" ,"hardware-effects", "hashjoin" , "hpcc", "hpcg" , "ligra", "parboil", 
@@ -157,3 +157,7 @@ print_value_file("result_latency_network.txt", "ramulator.read_network_latency_a
 
 get_stat_value("pim_accelerator", "get_stat_latency_queue_{}.sh".format(core_number), "result_latency_queue.txt", "read_queue_latency_avg")
 print_value_file_whole_number("result_latency_queue.txt", "ramulator.read_queue_latency_avg")
+
+
+get_stat_value("pim_accelerator", "get_stat_latency_queue_o_{}.sh".format(core_number), "result_latency_queue_o.txt", "queueing_latency_avg")
+print_value_file("result_latency_queue_o.txt", "ramulator.queueing_latency_avg")
