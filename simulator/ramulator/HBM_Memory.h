@@ -603,10 +603,10 @@ public:
                 }
             }
         }
-        sub_count_1 = (countKeysWithOneElement / addressAccCountTable.size()) *100;
-        sub_count_2 = (countKeysWithSameElement / addressAccCountTable.size()) *100;
-        sub_count_3 = (countKeysWithDifferentElementsNoDuplicates / addressAccCountTable.size()) *100;
-        sub_count_4 = (countKeysWithDifferentElementsDuplicates / addressAccCountTable.size()) *100;
+        sub_count_1 = (countKeysWithOneElement *100/ addressAccCountTable.size());
+        sub_count_2 = (countKeysWithSameElement*100 / addressAccCountTable.size());
+        sub_count_3 = (countKeysWithDifferentElementsNoDuplicates*100 / addressAccCountTable.size()) ;
+        sub_count_4 = (countKeysWithDifferentElementsDuplicates*100 / addressAccCountTable.size());
 
 
     }
