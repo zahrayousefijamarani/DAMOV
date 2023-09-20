@@ -11,6 +11,8 @@
 #include <bitset>
 #include <iterator>
 #include <string>
+#include <map>
+#include <tuple>
 
 using namespace std;
 
@@ -58,6 +60,11 @@ protected:
   ScalarStat queueing_latency_avg;
   ScalarStat queueing_latency_ns_avg;
   ScalarStat queueing_latency_sum;
+  ScalarStat sub_count_1;
+  ScalarStat sub_count_2;
+  ScalarStat sub_count_3;
+  ScalarStat sub_count_4;
+ 
 
   ScalarStat req_queue_length_avg;
   ScalarStat req_queue_length_sum;
@@ -68,15 +75,8 @@ protected:
 
   long max_address;
 public:
-    struct AddressAccCountEntry{
-          int column;
-          int row;
-          int bank;
-          int ctrl;
-          AddressAccCountEntry(){}
-          AddressAccCountEntry(int ctrl, int column, int row, int bank):ctrl(ctrl),column(column), row(row), bank(bank){}
-    };
-    vector<AddressAccCountEntry> addressAccCountTable;
+    std::map<std::tuple<int, int, int>, std::vector<int>> addressAccCountTable;
+    // vector<AddressAccCountEntry> addressAccCountTable;
     bool pim_mode_enabled = false;
     bool network_overhead = false;
     enum class Type {
@@ -312,7 +312,7 @@ public:
         read_queue_latency_avg
             .name("read_queue_latency_avg")
             .desc("The read memory queue latency cycles (in memory time domain) sum for all read requests in this channel")
-            .precision(0)
+            .precision(6)
             ;
         read_latency_avg
             .name("read_latency_avg")
@@ -323,6 +323,26 @@ public:
             .name("read_network_latency_avg")
             .desc("The average memory network latency cycles (in memory time domain) per request for all read requests in this channel")
             .precision(6)
+            ;
+        sub_count_1
+            .name("sub_count_1")
+            .desc("count of movement with one vault once")
+            .precision(3)
+            ;
+        sub_count_2
+            .name("sub_count_2")
+            .desc("count of movement with one vault more than one time")
+            .precision(3)
+            ;
+        sub_count_3
+            .name("sub_count_3")
+            .desc("count of movement with N vaults once")
+            .precision(3)
+            ;
+        sub_count_4
+            .name("sub_count_4")
+            .desc("count of movement with N vaults more than one time")
+            .precision(3)
             ;
         queueing_latency_sum
             .name("queueing_latency_sum")
@@ -432,18 +452,18 @@ public:
         if (is_active) {
           ramulator_active_cycles++;
         }
-        if (int(num_dram_cycles.value()) % 10000 == 0 && num_dram_cycles.value() !=0){
-            std::ofstream output_file("sub_count.txt", std::ios_base::app);
-            for (AddressAccCountEntry &e : addressAccCountTable) output_file << e.ctrl << ", " << e.bank << "," << e.column << ", " << e.row << "\n";
-            addressAccCountTable.clear();
-            // std::ostream_iterator<std::string> output_iterator(output_file, "\n");
-            // std::copy(addressAccCountTable.begin(), addressAccCountTable.end(), output_iterator);
-            // for (AddressAccCountEntry i = addressAccCountTable.begin(); i != addressAccCountTable.end(); ++i){
-                // output_file << i->addr << "," << int(i->ctrl) << "\n";
-            // }
-            output_file.close();
+        // if (int(num_dram_cycles.value()) % 10000 == 0 && num_dram_cycles.value() !=0){
+        //     std::ofstream output_file("sub_count.txt", std::ios_base::app);
+        //     for (AddressAccCountEntry &e : addressAccCountTable) output_file << e.ctrl << ", " << e.bank << "," << e.column << ", " << e.row << "\n";
+        //     addressAccCountTable.clear();
+        //     // std::ostream_iterator<std::string> output_iterator(output_file, "\n");
+        //     // std::copy(addressAccCountTable.begin(), addressAccCountTable.end(), output_iterator);
+        //     // for (AddressAccCountEntry i = addressAccCountTable.begin(); i != addressAccCountTable.end(); ++i){
+        //         // output_file << i->addr << "," << int(i->ctrl) << "\n";
+        //     // }
+        //     output_file.close();
                
-        }
+        // }
 
     }
 
@@ -507,7 +527,8 @@ public:
     }
 
     void addressAccCountTable_insert(Request req){
-        addressAccCountTable.push_back(AddressAccCountEntry(req.addr_vec[int(HBM::Level::Channel)], req.addr_vec[int(HBM::Level::Column)], req.addr_vec[int(HBM::Level::Row)], req.addr_vec[int(HBM::Level::Bank)]*req.addr_vec[int(HBM::Level::BankGroup)]));
+        addressAccCountTable[std::make_tuple(req.addr_vec[int(HBM::Level::Bank)]*req.addr_vec[int(HBM::Level::BankGroup)], req.addr_vec[int(HBM::Level::Column)], req.addr_vec[int(HBM::Level::Row)])].push_back(req.addr_vec[int(HBM::Level::Channel)]);
+        // addressAccCountTable.push_back(AddressAccCountEntry(, );
     }
 
     int calculate_extra_movement_latency(int source_p, int source_c, int destination_p, int destination_c, bool read){
@@ -528,26 +549,65 @@ public:
     }
 
     void finish() {
-      dram_capacity = max_address;
-      int *sz = spec->org_entry.count;
-      maximum_bandwidth = spec->speed_entry.rate * 1e6 * spec->channel_width * sz[int(HBM::Level::Channel)] / 8;
+        dram_capacity = max_address;
+        int *sz = spec->org_entry.count;
+        maximum_bandwidth = spec->speed_entry.rate * 1e6 * spec->channel_width * sz[int(HBM::Level::Channel)] / 8;
 
-      long dram_cycles = num_dram_cycles.value();
-      long total_read_req = num_read_requests.total();
-      for (auto ctrl : ctrls) {
-        ctrl->finish(dram_cycles);
-      }
-      read_bandwidth = read_transaction_bytes.value() * 1e9 / (dram_cycles * clk_ns());
-      write_bandwidth = write_transaction_bytes.value() * 1e9 / (dram_cycles * clk_ns());
-      read_latency_avg = read_latency_sum.value() / total_read_req;
-      read_network_latency_avg = read_network_latency_sum.value() / total_read_req;
-      read_queue_latency_avg = read_queue_latency_sum.value() / total_read_req;
-      queueing_latency_avg = queueing_latency_sum.value() / total_read_req;
-      read_latency_ns_avg = read_latency_avg.value() * clk_ns();
-      queueing_latency_ns_avg = queueing_latency_avg.value() * clk_ns();
-      req_queue_length_avg = req_queue_length_sum.value() / dram_cycles;
-      read_req_queue_length_avg = read_req_queue_length_sum.value() / dram_cycles;
-      write_req_queue_length_avg = write_req_queue_length_sum.value() / dram_cycles;
+        long dram_cycles = num_dram_cycles.value();
+        long total_read_req = num_read_requests.total();
+        for (auto ctrl : ctrls) {
+            ctrl->finish(dram_cycles);
+        }
+        read_bandwidth = read_transaction_bytes.value() * 1e9 / (dram_cycles * clk_ns());
+        write_bandwidth = write_transaction_bytes.value() * 1e9 / (dram_cycles * clk_ns());
+        read_latency_avg = read_latency_sum.value() / total_read_req;
+        read_network_latency_avg = read_network_latency_sum.value() / total_read_req;
+        read_queue_latency_avg = read_queue_latency_sum.value() / total_read_req;
+        queueing_latency_avg = queueing_latency_sum.value() / total_read_req;
+        read_latency_ns_avg = read_latency_avg.value() * clk_ns();
+        queueing_latency_ns_avg = queueing_latency_avg.value() * clk_ns();
+        req_queue_length_avg = req_queue_length_sum.value() / dram_cycles;
+        read_req_queue_length_avg = read_req_queue_length_sum.value() / dram_cycles;
+        write_req_queue_length_avg = write_req_queue_length_sum.value() / dram_cycles;
+
+        int countKeysWithOneElement = 0;
+        int countKeysWithSameElement = 0;
+        int countKeysWithDifferentElementsNoDuplicates = 0;
+        int countKeysWithDifferentElementsDuplicates = 0;
+
+        for (const auto& entry : addressAccCountTable) {
+            const std::vector<int>& values = entry.second;
+            int size = values.size();
+
+            // Task 1: Number of keys that contain 1 element in their list
+            if (size == 1) {
+                countKeysWithOneElement++;
+            }
+
+            // Task 2: Number of keys that contain the same element in their list
+            else if (size >= 2 && std::all_of(values.begin(), values.end(), [&values](int val) { return val == values[0]; })) {
+                countKeysWithSameElement++;
+            }
+
+            // Task 3: Number of keys that contain different elements with no duplicate values
+            else if (size >= 2) {
+                std::unordered_set<int> uniqueValues(values.begin(), values.end());
+                if (uniqueValues.size() == size) {
+                    countKeysWithDifferentElementsNoDuplicates++;
+                }
+
+                // Task 4: Number of keys that contain different elements with duplicate values
+                else {
+                    countKeysWithDifferentElementsDuplicates++;
+                }
+            }
+        }
+        sub_count_1 = (countKeysWithOneElement / addressAccCountTable.size()) *100;
+        sub_count_2 = (countKeysWithSameElement / addressAccCountTable.size()) *100;
+        sub_count_3 = (countKeysWithDifferentElementsNoDuplicates / addressAccCountTable.size()) *100;
+        sub_count_4 = (countKeysWithDifferentElementsDuplicates / addressAccCountTable.size()) *100;
+
+
     }
 
     long page_allocator(long addr, int coreid) {
