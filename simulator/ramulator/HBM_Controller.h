@@ -134,6 +134,8 @@ public:
     RowPolicy<HBM>* rowpolicy;  // determines the row-policy (e.g., closed-row vs. open-row)
     RowTable<HBM>* rowtable;  // tracks metadata about rows (e.g., which are open and for how long)
     Refresh<HBM>* refresh;
+    function<void(const Request&)> update_parent_with_latency;
+
 
     struct Queue {
         list<Request> q;
@@ -630,11 +632,15 @@ public:
                   
 		        channel->update_serving_requests(
                   req.addr_vec.data(), -1, clk);
+
                 }
                 if (req.type == Request::Type::READ || req.type == Request::Type::WRITE) {
                   req.callback(req);
                   pending.pop_front();
                }
+               if(update_parent_with_latency) {
+                    update_parent_with_latency(req);
+                }
             }
         }
         /*** 1.1. Serve completed writes ***/
@@ -731,6 +737,11 @@ public:
         // remove request from queue
         queue->q.erase(req);
     }
+
+    void attach_parent_update_latency_function(function<void(const Request&)> partent_function) {
+        update_parent_with_latency = partent_function;
+    }
+
     bool is_ready(list<Request>::iterator req)
     {
         typename HBM::Command cmd = get_first_cmd(req);

@@ -228,7 +228,7 @@ public:
       Swap, // Swap with remote vault's same address
       Allocate, // Allocate from local vault's reserved address. To be implemented
       Copy // Copy to local vault's reserved address. To be implemented
-    } subscription_prefetcher_type = SubscriptionPrefetcherType::Swap;
+    } subscription_prefetcher_type = SubscriptionPrefetcherType::None;
 
     std::map<string, SubscriptionPrefetcherType> name_to_prefetcher_type = {
       {"None", SubscriptionPrefetcherType::None},
@@ -394,9 +394,9 @@ public:
         }
         bool receive_buffer_is_free()const{return receiving < receiving_buffer_size;}
         void submit_subscription(int req_vault, long addr){
-           cout << "has address: " << has(addr) << endl;
+           //cout << "has address: " << has(addr) << endl;
           if(has(addr) == 1) {
-            cout << "address " << addr << " already exists in table. its status is " << get_status(addr);
+          //  cout << "address " << addr << " already exists in table. its status is " << get_status(addr);
           }
           assert(!has(addr));
           virtualized_table_sets[get_set(addr)]++;
@@ -504,7 +504,13 @@ public:
             update_valid_bit(addr);
           }
         }
-        bool has(long addr) const{return address_translation_table.count(addr) > 0;}
+        bool has(long addr) const{
+          for (const auto& pair : address_translation_table) {
+        // std::cout << "addr: " << pair.first << ", vault: " << pair.second.vault <<
+        //  ", status: " << int(pair.second.status )
+        // << std::endl;
+    }
+          return address_translation_table.count(addr) > 0;}
         bool has(long addr, int vault)const{
           if(has(addr)){
             return address_translation_table.at(addr).vault == vault;
@@ -943,7 +949,7 @@ public:
           size_t free_set = subscription_table -> get_set(addr);
           for(auto i = buffer.begin(); i != buffer.end(); i++) {
             if(subscription_table -> get_set(i -> addr) == free_set && ready_map.count(i-> addr) == 0){
-               cout << "Push " << i -> addr << " into the ready queue" << endl;
+               //cout << "Push " << i -> addr << " into the ready queue" << endl;
               ready_tasks.push_back(i);
               ready_map[i -> addr] = prev(ready_tasks.end());
             }
@@ -959,7 +965,7 @@ public:
         }
         void push_back(const SubscriptionTask& task) {
           if(buffer.size() < buffer_size && !has(task.addr)){
-             cout << "Inserting address " << task.addr << " into buffer " << endl;;
+             //cout << "Inserting address " << task.addr << " into buffer " << endl;;
             buffer.push_back(task);
             map[task.addr] = prev(end());
           }
@@ -1219,7 +1225,8 @@ public:
         return victim_addr;
       }
       // Start the entire process by allocating subscription table locally, and push a subscription request into the network or buffer
-      void subscribe_address(int req_vault, long addr) {
+      void subscribe_address(int req_vault, long addr, int subscribed_vault) {
+        
         // Starting by reserving space in the subscription table. For swap we need 2 entries (one for the actual subscription, one for the swapped out address)
         int required_space = swap ? 2 : 1;
         // Calculate vaules needed for next steps
@@ -1229,11 +1236,11 @@ public:
         int count = count_table.get_count(req_vault, addr);
         // cout << "Triggering subscription for address " << addr << " from vault " << req_vault << " to " << original_vault << " with count " << count << endl;
         SubscriptionTask task = SubscriptionTask(addr, req_vault, original_vault, hops, SubscriptionTask::Type::SubReq, count);
-        // cout << "SubReq task generated from " << task.from_vault << " to " << task.to_vault << " addr " << task.addr << endl;
+        //cout << "SubReq task generated from " << task.from_vault << " to " << task.to_vault << " addr " << task.addr << endl;
         // If the original vault of the address is the current vault (i.e. we have an address subscribed elsewhere and we want it back), we need to process unsubscription
         if(original_vault == req_vault) {
           // cout << "addr " << addr << " is currently in the same to vault as subscribe vault" << endl;
-          unsubscribe_address(req_vault, addr);
+          unsubscribe_address(req_vault, addr);                            ////// changed - bishoy
         // If we have space to insert it into the subscription table and to receive the data, we push it into the network
         } else if(subscription_tables[req_vault].receive_buffer_is_free()
           && subscription_tables[req_vault].subscription_table_is_free(addr, required_space)){
@@ -1247,7 +1254,7 @@ public:
             // We find a victim address to free up subscription table
             long victim_addr = find_victim_for_unsubscription(req_vault, addr);
             // We then submit the address for unsubscribe
-            unsubscribe_address(req_vault, victim_addr);
+            unsubscribe_address(req_vault, victim_addr);     ////// changed - bishoy
           }
           // If we have space, we insert it into the buffer
           if(subscription_buffers[req_vault].is_free(task.addr)){
@@ -1262,7 +1269,7 @@ public:
       }
       // Finish pushing the subscription request into the network
       void push_subscribe_request_into_network(const SubscriptionTask& input_task) {
-        cout << "push_subscribe_request_into_network called " << endl;
+        //cout << "push_subscribe_request_into_network called " << endl;
         assert(input_task.type == SubscriptionTask::Type::SubReq);
         // Make a copy for modification
         SubscriptionTask task = input_task;
@@ -1288,6 +1295,7 @@ public:
       }
       // Process received subscription request. Start data transfer or push it into the buffer or return failure
       void receive_subscribe_request(const SubscriptionTask& task) {
+        //cout << "receive_subscribe_request called " << endl; 
         assert(task.type == SubscriptionTask::Type::SubReq);
         // Starting by reserving space in the subscription table. For swap we need 2 entries (one for the actual subscription, one for the swapped out address)
         // If the address is already subscribed (to somewhere else), we do not need any space for it as we can use the existing entry
@@ -1320,7 +1328,6 @@ public:
       }
       // Finish processing subscription request
       void process_subscribe_request(const SubscriptionTask& task) {
-        cout << "process_subscribe_request called " << endl; 
         assert(task.type == SubscriptionTask::Type::SubReq);
         // We calculate how many hops it required to transfer the data
         int hops = mem_ptr -> calculate_hops_travelled(task.to_vault, task.from_vault);
@@ -1444,6 +1451,7 @@ public:
       }
       // Start the unsubscription process by determining if the unsubscription is made by the holder of the address, and act accordingly
       void unsubscribe_address(int caller_vault, long addr) {
+        //cout << "unsubscribe_address from " << caller_vault <<endl;
         if(!subscription_tables[caller_vault].has(addr)) {
           cout << ("We have addr "+to_string(addr)+" for subscription from vault "+to_string(caller_vault)+" but we do not have it");
         }
@@ -1960,7 +1968,7 @@ public:
         }
       }
       void pre_process_addr(long& addr) {
-        mem_ptr -> clear_lower_bits(addr, mem_ptr -> tx_bits + tailing_zero);
+        mem_ptr -> clear_lower_bits(addr, mem_ptr -> tx_bits + tailing_zero);                 
       }
       // A rewritten function that updates LRU entries, translates old address to the correct vault, and then update counter table and check for prefetch
       void access_address(Request& req) {
@@ -1974,6 +1982,7 @@ public:
         // If we have the address in the subscription table, we have it in LRU or LFU unit, and we send it to the unit for counting
         if(subscription_tables[original_vault_id].is_subscribed(addr) || subscription_tables[original_vault_id].is_pending_removal(addr)) {
           val_vault_id = subscription_tables[original_vault_id][addr];
+          //cout << "THE NEW SUBSCRIBED VAULT IS : " << val_vault_id <<endl;
           if(subscription_table_replacement_policy == SubscriptionPrefetcherReplacementPolicy::LRU) {
             // Update the LRU entries of the address in from table (located in the original vault) and to table (located in the current subscribed vault)
             lru_units[original_vault_id].touch(addr);
@@ -2020,7 +2029,7 @@ public:
             || subscription_tables[req_vault_id].is_pending_removal(addr) 
             || subscription_tables[req_vault_id].is_subscribed(addr, req_vault_id))) {
           // cout << "Address " << addr << " with hop " << hops << " and count " << count << " and originally in vault " << original_vault_id << " meets subscription threshold. We now subscribe it from " << val_vault_id << " to " << req_vault_id << endl;
-          subscribe_address(req_vault_id, addr);
+          subscribe_address(req_vault_id, addr, val_vault_id);                     // changed - Bishoy
         }
       }
       void process_write_request(const Request& req) {
@@ -2890,10 +2899,10 @@ public:
         break;
         case int(Type::RoBaRaCoCh): {
           addr |= row;
-          addr <<= addr_bits[int(HBM::Level::BankGroup)];
-          addr |= bank_group;
           addr <<= addr_bits[int(HBM::Level::Bank)];
           addr |= bank;
+          addr <<= addr_bits[int(HBM::Level::BankGroup)];
+          addr |= bank_group;
           addr <<= addr_bits[int(HBM::Level::Rank)];
           addr |= rank; 
           // addr <<= column_significant_bits;
@@ -2914,56 +2923,26 @@ public:
       return addr;
 }
 
-vector<int> address_to_address_vector(const long& addr) {
-      long local_addr = addr;
+vector<int> address_to_address_vector(const long& p_addr) {
+      long addr = addr;
       // cout << "The input address is " << addr;
       vector<int> addr_vec;
       addr_vec.resize(addr_bits.size());
-      switch(int(type)) {
-          case int(Type::ChRaBaRoCo): {
-            addr_vec[int(HBM::Level::Column)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Column)]);
-            // int column_MSB_bits =
-            //     slice_lower_bits(
-            //       local_addr, addr_bits[int(HBM::Level::Column)] - max_block_col_bits);
-            // addr_vec[int(HBM::Level::Column)] =
-            //   addr_vec[int(HBM::Level::Column)] | (column_MSB_bits << max_block_col_bits);
-            addr_vec[int(HBM::Level::Row)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Row)]);
-            addr_vec[int(HBM::Level::Bank)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Bank)]);
-            addr_vec[int(HBM::Level::BankGroup)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::BankGroup)]);
-            addr_vec[int(HBM::Level::Rank)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Rank)]);
-            addr_vec[int(HBM::Level::Channel)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Channel)]);
-          }
-          break;
-          case int(Type::RoBaRaCoCh): {
-            // addr_vec[int(HBM::Level::Column)] =
-            //     slice_lower_bits(local_addr, max_block_col_bits);
-            addr_vec[int(HBM::Level::Channel)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Channel)]);
-            // int column_MSB_bits =
-            //   slice_lower_bits(
-            //       local_addr, addr_bits[int(HBM::Level::Column)] - max_block_col_bits);
-            // addr_vec[int(HBM::Level::Column)] =
-            //   addr_vec[int(HBM::Level::Column)] | (column_MSB_bits << max_block_col_bits);
-            addr_vec[int(HBM::Level::Column)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Column)]);
-            addr_vec[int(HBM::Level::Rank)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Rank)]);
-            addr_vec[int(HBM::Level::Bank)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Bank)]);
-            addr_vec[int(HBM::Level::BankGroup)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::BankGroup)]);
-            addr_vec[int(HBM::Level::Row)] =
-                slice_lower_bits(local_addr, addr_bits[int(HBM::Level::Row)]);
-          }
-          break;
-          default:
-              assert(false);
+      clear_lower_bits(addr, tx_bits);
+
+        switch(int(type)){
+            case int(Type::ChRaBaRoCo):
+                for (int i = addr_bits.size() - 1; i >= 0; i--)
+                    addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
+                break;
+            case int(Type::RoBaRaCoCh):
+                addr_vec[0] = slice_lower_bits(addr, addr_bits[0]);
+                addr_vec[addr_bits.size() - 1] = slice_lower_bits(addr, addr_bits[addr_bits.size() - 1]);
+                for (int i = 1; i <= int(HBM::Level::Row); i++)
+                    addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
+                break;
+            default:
+                assert(false);
         }
         // cout << " And after translation, it is in Vault " << addr_vec[int(HBM::Level::Vault)] << " BankGroup " << addr_vec[int(HBM::Level::BankGroup)]
         //     << " Bank " << addr_vec[int(HBM::Level::Bank)] << " Row " << addr_vec[int(HBM::Level::Row)] << " Column " << addr_vec[int(HBM::Level::Column)] << endl;
@@ -2986,13 +2965,13 @@ vector<int> address_to_address_vector(const long& addr) {
           warmup_finished = true;
           clk_at_end_of_warmup = clk;
           string sub_stats_to_open = application_name+".ramulator.subscription_stats.end_of_warmup";
-          //write_sub_stats_file(sub_stats_to_open);
+          write_sub_stats_file(sub_stats_to_open);
           write_address_distribution(".end_of_warmup");
         }
         ////////////////////////////////////////////////////////////
 
         // Each transaction size is 2^tx_bits, so first clear the lowest tx_bits bits
-        clear_lower_bits(addr, tx_bits);
+        //clear_lower_bits(addr, tx_bits);
 
         switch(int(type)){
             case int(Type::ChRaBaRoCo):
@@ -3008,7 +2987,7 @@ vector<int> address_to_address_vector(const long& addr) {
             default:
                 assert(false);
         }
-
+      
         ////////////////////////////
         int original_vault = req.addr_vec[int(HBM::Level::Channel)];
         int requester_vault = req.coreid;
@@ -3025,7 +3004,7 @@ vector<int> address_to_address_vector(const long& addr) {
 
           ////////////////////////////////////////////
 
-
+      req.arrive_hmc = clk;
 
       if(pim_mode_enabled )
       { 
@@ -3044,6 +3023,11 @@ vector<int> address_to_address_vector(const long& addr) {
                 // One read request will take = 1 Flit*hops + 5*hops
                 hops = no_prefetcher_hops;
               } else {
+                // cout << "REQUEST TYPE = " << int(req.type) <<endl;
+                // cout << "REQUESTER VAULT = " << requester_vault <<endl;
+                // cout << "SUBSCRIBED VAULT = " << subscribed_vault <<endl;
+                // cout << "ORIGINAL VAULT = " << original_vault <<endl;
+
                 if (req.type == Request::Type::READ){
                 hops = 0;
                 if(requester_vault != subscribed_vault) {
@@ -3054,15 +3038,24 @@ vector<int> address_to_address_vector(const long& addr) {
                   // Then the subscribed vault send the data back to the requester vault
                   hops += calculate_hops_travelled(subscribed_vault, requester_vault, DATA_LENGTH);
                 }
-                }else {
+                }else if (req.type == Request::Type::WRITE) {
+                  //cout << "write command" <<endl;
                   no_prefetcher_hops = calculate_hops_travelled(requester_vault, original_vault, WRITE_LENGTH);
                   if(requester_vault != subscribed_vault) {
                 // We write to the original vault in any case, and let the original vault determine whether to fowraed it or not
                     hops = no_prefetcher_hops;
                   } else {
+                   // cout << "requester === subscribed" <<endl;
                     hops = 0;
                   }
-                } 
+                } else {
+                    if(requester_vault == subscribed_vault) {
+                      hops = 0;
+                    } else {
+                      // The requester first send data to the original vault, then the original vault forward it to the subscribed vault
+                      hops = calculate_hops_travelled(requester_vault, original_vault)+calculate_hops_travelled(original_vault, subscribed_vault);
+                    } 
+                }
               }
             req.hops = hops;
             if(req.type == Request::Type::READ)
@@ -3072,6 +3065,7 @@ vector<int> address_to_address_vector(const long& addr) {
             addressAccCountTable_insert(req);
 
               // if(network_overhead) {
+                //cout << "HOPS ==== " << hops << endl;
               if (subscription_prefetcher_type != SubscriptionPrefetcherType::None && hops != 0) {
                 prefetcher_set.update_count_table_and_submit_subscription(req);
                }
@@ -3220,117 +3214,117 @@ vector<int> address_to_address_vector(const long& addr) {
     }
 
 
-    // void write_sub_stats_file(string sub_stats_to_open) {
-    //   ofstream sub_stats_ofs(sub_stats_to_open.c_str(), ofstream::out);
-    //   if (subscription_prefetcher_type != SubscriptionPrefetcherType::None) {
-    //     sub_stats_ofs << "-----Prefetcher Stats-----" << "\n";
-    //     sub_stats_ofs << "MemAccesses: " << prefetcher_set.get_total_memory_accesses() << "\n";
-    //     sub_stats_ofs << "SubAccesses: " << prefetcher_set.get_total_subscribed_accesses() << "\n";
-    //     sub_stats_ofs << "SubLocAccesses: " << prefetcher_set.get_total_subscribed_local_accesses() << "\n";
-    //     sub_stats_ofs << "SubmittedSubscriptions: " << prefetcher_set.get_total_submitted_subscriptions() << "\n";
-    //     sub_stats_ofs << "SuccessfulSubscriptions: " << prefetcher_set.get_total_successful_subscriptions() << "\n";
-    //     sub_stats_ofs << "UnsuccessfulSubscriptions: " << prefetcher_set.get_total_unsuccessful_subscriptions() << "\n";
-    //     sub_stats_ofs << "SuccessfulSubscriptionFromBuffer: " << prefetcher_set.get_total_subscription_from_buffer() << "\n";
-    //     sub_stats_ofs << "Unsubscriptions: " << prefetcher_set.get_total_unsubscriptions() << "\n";
-    //     sub_stats_ofs << "Resubscriptions: " << prefetcher_set.get_total_resubscriptions() << "\n";
-    //     sub_stats_ofs << "SuccessfulInsertationToBuffer: " << prefetcher_set.get_total_buffer_successful_insertation() << "\n";
-    //     sub_stats_ofs << "UnsuccessfulInsertationToBuffer: " << prefetcher_set.get_total_buffer_unsuccessful_insertation() << "\n";
-    //     sub_stats_ofs << "SubscriptionPktHopsTravelled: " << prefetcher_set.get_total_hops() << "\n";
-    //     sub_stats_ofs << "CountTableUpdates: " << prefetcher_set.get_count_table_insertions() << "\n";
-    //     sub_stats_ofs << "CountTableEvictions: " << prefetcher_set.get_count_table_evictions() << "\n";
-    //     sub_stats_ofs << "CountTableTotalCount: " << prefetcher_set.get_count_table_total_count_at_eviction() << "\n";
-    //     sub_stats_ofs << "CountTableAvgCount: " << prefetcher_set.get_count_table_avg_count_at_eviction() << "\n";
-    //     sub_stats_ofs << "CountTableUpdatesWithoutEviction: " << (prefetcher_set.get_count_table_insertions() - prefetcher_set.get_count_table_evictions()) << "\n";
-    //     sub_stats_ofs << "CountTableMaxCount: " << prefetcher_set.get_count_table_maximum_count() << "\n";
-    //     sub_stats_ofs << "TotalPosFeedback: " << prefetcher_set.get_total_positive_feedback() << "\n";
-    //     sub_stats_ofs << "TotalNegFeedback: " << prefetcher_set.get_total_negative_feedback() << "\n";
-    //     sub_stats_ofs << "TotalThresholdInc: " << prefetcher_set.get_total_threshold_increases() << "\n";
-    //     sub_stats_ofs << "TotalThresholdDec: " << prefetcher_set.get_total_threshold_decreases() << "\n";
-    //     sub_stats_ofs << "MaxCountThreshold: " << prefetcher_set.get_prefetch_maximum_count_threshold() << "\n";
-    //     sub_stats_ofs << "TotalInTable: "<< prefetcher_set.get_total_in_table() << "\n";
-    //     sub_stats_ofs << "AvgInTable: " << prefetcher_set.get_avg_in_table_per_subscription() << "\n";
-    //     sub_stats_ofs << "-----End Prefetcher Stats-----" << "\n";
-    //   } else {
-    //     sub_stats_ofs << "MemAccesses: " << total_memory_accesses << "\n";
-    //   }
-    //   sub_stats_ofs << "AccessPktHopsTravelled: " << total_hops << "\n";
-    //   long long total_latency = 0;
-    //   long long total_hmc_latency = 0;
-    //   long long total_waiting_ready = 0;
-    //   long long total_readq_pending = 0;
-    //   long long total_writeq_pending = 0;
-    //   long long total_otherq_pending = 0;
-    //   long long total_overflow_pending = 0;
-    //   long long total_transfer_latency = 0;
-    //   long long total_in_memory_latency = 0;
-    //   long long total_process_latency = 0;
-    //   long long total_incoming_queuing_latency = 0;
-    //   long long total_outgoing_queuing_latency = 0;
-    //   long long total_bursts = 0;
-    //   long long stalled_cycles = 0;
-    //   long long total_pending_queue_pending = 0;
-    //   sub_stats_ofs << "-----Controller Stats-----" << "\n";
-    //   for(int c = 0; c < ctrls.size(); c++) {
-    //     sub_stats_ofs << "Controller" << c << "MaxReadQQSize: " << ctrls[c] -> readq.max_q_size << "\n";
-    //     sub_stats_ofs << "Controller" << c << "MaxWriteQQSize: " << ctrls[c] -> writeq.max_q_size << "\n";
-    //     sub_stats_ofs << "Controller" << c << "MaxOtherQQSize: " << ctrls[c] -> otherq.max_q_size << "\n";
-    //     sub_stats_ofs << "Controller" << c << "MaxOverflowQSize: " << ctrls[c] -> overflow.max_q_size << "\n";
-    //     sub_stats_ofs << "Controller" << c << "MaxReadQArrivelQSize: " << ctrls[c] -> readq.max_arrivel_size << "\n";
-    //     sub_stats_ofs << "Controller" << c << "MaxWriteQArrivelQSize: " << ctrls[c] -> writeq.max_arrivel_size << "\n";
-    //     sub_stats_ofs << "Controller" << c << "MaxOtherQArrivelQSize: " << ctrls[c] -> otherq.max_arrivel_size << "\n";
-    //     sub_stats_ofs << "Controller" << c << "MaxOverflowArrivelQSize: " << ctrls[c] -> overflow.max_arrivel_size << "\n";
-    //     sub_stats_ofs << "Controller" << c << "ReadQPending: " << ctrls[c] -> readq.total_pending_task << "\n";
-    //     total_readq_pending += ctrls[c] -> readq.total_pending_task;
-    //     sub_stats_ofs << "Controller" << c << "WriteQPending: " << ctrls[c] -> writeq.total_pending_task << "\n";
-    //     total_writeq_pending += ctrls[c] -> writeq.total_pending_task;
-    //     sub_stats_ofs << "Controller" << c << "OtherQPending: " << ctrls[c] -> otherq.total_pending_task << "\n";
-    //     total_otherq_pending += ctrls[c] -> otherq.total_pending_task;
-    //     sub_stats_ofs << "Controller" << c << "OverflowPending: " << ctrls[c] -> overflow.total_pending_task << "\n";
-    //     total_overflow_pending += ctrls[c] -> overflow.total_pending_task;
-    //     sub_stats_ofs << "Controller" << c << "PendingQPending: " << ctrls[c] -> total_pending_finished_task << "\n";
-    //     total_pending_queue_pending += ctrls[c] -> total_pending_finished_task;
-    //     sub_stats_ofs << "Controller" << c << "WaitingReady: " << ctrls[c]->total_cycle_waiting_not_ready_request << "\n";
-    //     total_waiting_ready += ctrls[c]->total_cycle_waiting_not_ready_request;
-    //     sub_stats_ofs << "Controller" << c << "RequestLatency: " << ctrls[c]->total_latency << "\n";
-    //     total_latency += ctrls[c]->total_latency;
-    //     sub_stats_ofs << "Controller" << c << "HMCLatency: " << ctrls[c]->total_hmc_latency << "\n";
-    //     total_hmc_latency += ctrls[c]->total_hmc_latency;
-    //     sub_stats_ofs << "Controller" << c << "TransferLatency: " << ctrls[c]->total_transfer_latency << "\n";
-    //     total_transfer_latency += ctrls[c]->total_transfer_latency;
-    //     sub_stats_ofs << "Controller" << c << "InMemoryLatency: " << ctrls[c]->total_in_memory_latency << "\n";
-    //     total_in_memory_latency += ctrls[c]->total_in_memory_latency;
-    //     sub_stats_ofs << "Controller" << c << "ProcessLatency: " << ctrls[c]->total_process_latency << "\n";
-    //     total_process_latency += ctrls[c]->total_process_latency;
-    //     sub_stats_ofs << "Controller" << c << "IncomingQueuingLatency: " << ctrls[c]->total_incoming_queuing_latency << "\n";
-    //     total_incoming_queuing_latency += ctrls[c]->total_incoming_queuing_latency;
-    //     sub_stats_ofs << "Controller" << c << "OutgoingQueuingLatency: " << ctrls[c]->total_outgoing_queuing_latency << "\n";
-    //     total_outgoing_queuing_latency += ctrls[c]->total_outgoing_queuing_latency;
-    //     sub_stats_ofs << "Controller" << c << "RequestBursts: " << ctrls[c]->total_bursts << "\n";
-    //     total_bursts += ctrls[c]->total_bursts;
-    //     sub_stats_ofs << "Controller" << c << "StalledCycles: " << ctrls[c]->stalled_cycles << "\n";
-    //     stalled_cycles += ctrls[c]->stalled_cycles;
-    //     assert(total_hmc_latency >= 0);
-    //     assert(total_latency >= 0);
-    //   }
-    //   sub_stats_ofs << "TotalWaitingReady: " << total_waiting_ready << "\n";
-    //   sub_stats_ofs << "TotalRequestLatency: " << total_latency << "\n";
-    //   sub_stats_ofs << "TotalHMCLatency: " << total_hmc_latency << "\n";
-    //   sub_stats_ofs << "TotalTransferLatency: " << total_transfer_latency << "\n";
-    //   sub_stats_ofs << "TotalInMemoryLatency: " << total_in_memory_latency << "\n";
-    //   sub_stats_ofs << "TotalProcessLatency: " << total_process_latency << "\n";
-    //   sub_stats_ofs << "TotalIncomingQueuingLatency: " << total_incoming_queuing_latency << "\n";
-    //   sub_stats_ofs << "TotalOutgoingQueuingLatency: " << total_outgoing_queuing_latency << "\n";
-    //   sub_stats_ofs << "TotalStalledCycles: " << stalled_cycles << "\n";
-    //   sub_stats_ofs << "TotalRequestBursts: " << total_bursts << "\n";
-    //   sub_stats_ofs << "MemoryRequests: " << mem_req_count << "\n";
-    //   sub_stats_ofs << "TotalReadQPending: " << total_readq_pending << "\n";
-    //   sub_stats_ofs << "TotalWriteQPending: " << total_writeq_pending << "\n";
-    //   sub_stats_ofs << "TotalOtherQPending: " << total_otherq_pending << "\n";
-    //   sub_stats_ofs << "TotalOverflowPending: " << total_overflow_pending << "\n";
-    //   sub_stats_ofs << "TotalPendingQPending: " << total_pending_queue_pending << "\n";
-    //   sub_stats_ofs << "-----End Controller Stats-----" << "\n";  
-    //   sub_stats_ofs.close();
-    // }
+    void write_sub_stats_file(string sub_stats_to_open) {
+      ofstream sub_stats_ofs(sub_stats_to_open.c_str(), ofstream::out);
+      if (subscription_prefetcher_type != SubscriptionPrefetcherType::None) {
+        sub_stats_ofs << "-----Prefetcher Stats-----" << "\n";
+        sub_stats_ofs << "MemAccesses: " << prefetcher_set.get_total_memory_accesses() << "\n";
+        sub_stats_ofs << "SubAccesses: " << prefetcher_set.get_total_subscribed_accesses() << "\n";
+        sub_stats_ofs << "SubLocAccesses: " << prefetcher_set.get_total_subscribed_local_accesses() << "\n";
+        sub_stats_ofs << "SubmittedSubscriptions: " << prefetcher_set.get_total_submitted_subscriptions() << "\n";
+        sub_stats_ofs << "SuccessfulSubscriptions: " << prefetcher_set.get_total_successful_subscriptions() << "\n";
+        sub_stats_ofs << "UnsuccessfulSubscriptions: " << prefetcher_set.get_total_unsuccessful_subscriptions() << "\n";
+        sub_stats_ofs << "SuccessfulSubscriptionFromBuffer: " << prefetcher_set.get_total_subscription_from_buffer() << "\n";
+        sub_stats_ofs << "Unsubscriptions: " << prefetcher_set.get_total_unsubscriptions() << "\n";
+        sub_stats_ofs << "Resubscriptions: " << prefetcher_set.get_total_resubscriptions() << "\n";
+        sub_stats_ofs << "SuccessfulInsertationToBuffer: " << prefetcher_set.get_total_buffer_successful_insertation() << "\n";
+        sub_stats_ofs << "UnsuccessfulInsertationToBuffer: " << prefetcher_set.get_total_buffer_unsuccessful_insertation() << "\n";
+        sub_stats_ofs << "SubscriptionPktHopsTravelled: " << prefetcher_set.get_total_hops() << "\n";
+        sub_stats_ofs << "CountTableUpdates: " << prefetcher_set.get_count_table_insertions() << "\n";
+        sub_stats_ofs << "CountTableEvictions: " << prefetcher_set.get_count_table_evictions() << "\n";
+        sub_stats_ofs << "CountTableTotalCount: " << prefetcher_set.get_count_table_total_count_at_eviction() << "\n";
+        sub_stats_ofs << "CountTableAvgCount: " << prefetcher_set.get_count_table_avg_count_at_eviction() << "\n";
+        sub_stats_ofs << "CountTableUpdatesWithoutEviction: " << (prefetcher_set.get_count_table_insertions() - prefetcher_set.get_count_table_evictions()) << "\n";
+        sub_stats_ofs << "CountTableMaxCount: " << prefetcher_set.get_count_table_maximum_count() << "\n";
+        sub_stats_ofs << "TotalPosFeedback: " << prefetcher_set.get_total_positive_feedback() << "\n";
+        sub_stats_ofs << "TotalNegFeedback: " << prefetcher_set.get_total_negative_feedback() << "\n";
+        sub_stats_ofs << "TotalThresholdInc: " << prefetcher_set.get_total_threshold_increases() << "\n";
+        sub_stats_ofs << "TotalThresholdDec: " << prefetcher_set.get_total_threshold_decreases() << "\n";
+        sub_stats_ofs << "MaxCountThreshold: " << prefetcher_set.get_prefetch_maximum_count_threshold() << "\n";
+        sub_stats_ofs << "TotalInTable: "<< prefetcher_set.get_total_in_table() << "\n";
+        sub_stats_ofs << "AvgInTable: " << prefetcher_set.get_avg_in_table_per_subscription() << "\n";
+        sub_stats_ofs << "-----End Prefetcher Stats-----" << "\n";
+      } else {
+        sub_stats_ofs << "MemAccesses: " << total_memory_accesses << "\n";
+      }
+      // sub_stats_ofs << "AccessPktHopsTravelled: " << total_hops << "\n";
+      // long long total_latency = 0;
+      // long long total_hmc_latency = 0;
+      // long long total_waiting_ready = 0;
+      // long long total_readq_pending = 0;
+      // long long total_writeq_pending = 0;
+      // long long total_otherq_pending = 0;
+      // long long total_overflow_pending = 0;
+      // long long total_transfer_latency = 0;
+      // long long total_in_memory_latency = 0;
+      // long long total_process_latency = 0;
+      // long long total_incoming_queuing_latency = 0;
+      // long long total_outgoing_queuing_latency = 0;
+      // long long total_bursts = 0;
+      // long long stalled_cycles = 0;
+      // long long total_pending_queue_pending = 0;
+      // sub_stats_ofs << "-----Controller Stats-----" << "\n";
+      // for(int c = 0; c < ctrls.size(); c++) {
+      //   sub_stats_ofs << "Controller" << c << "MaxReadQQSize: " << ctrls[c] -> readq.max_q_size << "\n";
+      //   sub_stats_ofs << "Controller" << c << "MaxWriteQQSize: " << ctrls[c] -> writeq.max_q_size << "\n";
+      //   sub_stats_ofs << "Controller" << c << "MaxOtherQQSize: " << ctrls[c] -> otherq.max_q_size << "\n";
+      //   sub_stats_ofs << "Controller" << c << "MaxOverflowQSize: " << ctrls[c] -> overflow.max_q_size << "\n";
+      //   sub_stats_ofs << "Controller" << c << "MaxReadQArrivelQSize: " << ctrls[c] -> readq.max_arrivel_size << "\n";
+      //   sub_stats_ofs << "Controller" << c << "MaxWriteQArrivelQSize: " << ctrls[c] -> writeq.max_arrivel_size << "\n";
+      //   sub_stats_ofs << "Controller" << c << "MaxOtherQArrivelQSize: " << ctrls[c] -> otherq.max_arrivel_size << "\n";
+      //   sub_stats_ofs << "Controller" << c << "MaxOverflowArrivelQSize: " << ctrls[c] -> overflow.max_arrivel_size << "\n";
+      //   sub_stats_ofs << "Controller" << c << "ReadQPending: " << ctrls[c] -> readq.total_pending_task << "\n";
+      //   total_readq_pending += ctrls[c] -> readq.total_pending_task;
+      //   sub_stats_ofs << "Controller" << c << "WriteQPending: " << ctrls[c] -> writeq.total_pending_task << "\n";
+      //   total_writeq_pending += ctrls[c] -> writeq.total_pending_task;
+      //   sub_stats_ofs << "Controller" << c << "OtherQPending: " << ctrls[c] -> otherq.total_pending_task << "\n";
+      //   total_otherq_pending += ctrls[c] -> otherq.total_pending_task;
+      //   sub_stats_ofs << "Controller" << c << "OverflowPending: " << ctrls[c] -> overflow.total_pending_task << "\n";
+      //   total_overflow_pending += ctrls[c] -> overflow.total_pending_task;
+      //   sub_stats_ofs << "Controller" << c << "PendingQPending: " << ctrls[c] -> total_pending_finished_task << "\n";
+      //   total_pending_queue_pending += ctrls[c] -> total_pending_finished_task;
+      //   sub_stats_ofs << "Controller" << c << "WaitingReady: " << ctrls[c]->total_cycle_waiting_not_ready_request << "\n";
+      //   total_waiting_ready += ctrls[c]->total_cycle_waiting_not_ready_request;
+      //   sub_stats_ofs << "Controller" << c << "RequestLatency: " << ctrls[c]->total_latency << "\n";
+      //   total_latency += ctrls[c]->total_latency;
+      //   sub_stats_ofs << "Controller" << c << "HMCLatency: " << ctrls[c]->total_hmc_latency << "\n";
+      //   total_hmc_latency += ctrls[c]->total_hmc_latency;
+      //   sub_stats_ofs << "Controller" << c << "TransferLatency: " << ctrls[c]->total_transfer_latency << "\n";
+      //   total_transfer_latency += ctrls[c]->total_transfer_latency;
+      //   sub_stats_ofs << "Controller" << c << "InMemoryLatency: " << ctrls[c]->total_in_memory_latency << "\n";
+      //   total_in_memory_latency += ctrls[c]->total_in_memory_latency;
+      //   sub_stats_ofs << "Controller" << c << "ProcessLatency: " << ctrls[c]->total_process_latency << "\n";
+      //   total_process_latency += ctrls[c]->total_process_latency;
+      //   sub_stats_ofs << "Controller" << c << "IncomingQueuingLatency: " << ctrls[c]->total_incoming_queuing_latency << "\n";
+      //   total_incoming_queuing_latency += ctrls[c]->total_incoming_queuing_latency;
+      //   sub_stats_ofs << "Controller" << c << "OutgoingQueuingLatency: " << ctrls[c]->total_outgoing_queuing_latency << "\n";
+      //   total_outgoing_queuing_latency += ctrls[c]->total_outgoing_queuing_latency;
+      //   sub_stats_ofs << "Controller" << c << "RequestBursts: " << ctrls[c]->total_bursts << "\n";
+      //   total_bursts += ctrls[c]->total_bursts;
+      //   sub_stats_ofs << "Controller" << c << "StalledCycles: " << ctrls[c]->stalled_cycles << "\n";
+      //   stalled_cycles += ctrls[c]->stalled_cycles;
+      //   assert(total_hmc_latency >= 0);
+      //   assert(total_latency >= 0);
+      // }
+      // sub_stats_ofs << "TotalWaitingReady: " << total_waiting_ready << "\n";
+      // sub_stats_ofs << "TotalRequestLatency: " << total_latency << "\n";
+      // sub_stats_ofs << "TotalHMCLatency: " << total_hmc_latency << "\n";
+      // sub_stats_ofs << "TotalTransferLatency: " << total_transfer_latency << "\n";
+      // sub_stats_ofs << "TotalInMemoryLatency: " << total_in_memory_latency << "\n";
+      // sub_stats_ofs << "TotalProcessLatency: " << total_process_latency << "\n";
+      // sub_stats_ofs << "TotalIncomingQueuingLatency: " << total_incoming_queuing_latency << "\n";
+      // sub_stats_ofs << "TotalOutgoingQueuingLatency: " << total_outgoing_queuing_latency << "\n";
+      // sub_stats_ofs << "TotalStalledCycles: " << stalled_cycles << "\n";
+      // sub_stats_ofs << "TotalRequestBursts: " << total_bursts << "\n";
+      // sub_stats_ofs << "MemoryRequests: " << mem_req_count << "\n";
+      // sub_stats_ofs << "TotalReadQPending: " << total_readq_pending << "\n";
+      // sub_stats_ofs << "TotalWriteQPending: " << total_writeq_pending << "\n";
+      // sub_stats_ofs << "TotalOtherQPending: " << total_otherq_pending << "\n";
+      // sub_stats_ofs << "TotalOverflowPending: " << total_overflow_pending << "\n";
+      // sub_stats_ofs << "TotalPendingQPending: " << total_pending_queue_pending << "\n";
+      // sub_stats_ofs << "-----End Controller Stats-----" << "\n";  
+      sub_stats_ofs.close();
+    }
 
     void write_address_distribution(string postfix) {
       string to_open = application_name+".ramulator.address_distribution"+postfix;
@@ -3467,7 +3461,7 @@ vector<int> address_to_address_vector(const long& addr) {
       }
       prefetcher_set.print_stats();
       string sub_stats_to_open = application_name+".ramulator.subscription_stats";
-      //write_sub_stats_file(sub_stats_to_open);
+      write_sub_stats_file(sub_stats_to_open);
       cout << "Total number of hops travelled: " << total_hops << endl;
 
       string address_access_count_to_open = application_name+".ramulator.address_access_count.csv";
@@ -3555,6 +3549,9 @@ private:
     void clear_lower_bits(long& addr, int bits)
     {
         addr >>= bits;
+    }
+    void clear_higher_bits(long& addr, long mask) {
+        addr = (addr & mask);
     }
     long lrand(void) {
         if(sizeof(int) < sizeof(long)) {
