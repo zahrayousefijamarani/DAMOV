@@ -2899,22 +2899,21 @@ public:
 }
 
 vector<int> address_to_address_vector(const long& p_addr) {
-      long addr = *p_addr;
-      // cout << "The input address is " << addr;
+      // cout << "The input address is " << *p_addr;
       vector<int> addr_vec;
       addr_vec.resize(addr_bits.size());
-      //clear_lower_bits(addr, tx_bits);
+      //clear_lower_bits(p_addr, tx_bits);
 
         switch(int(type)){
             case int(Type::ChRaBaRoCo):
                 for (int i = addr_bits.size() - 1; i >= 0; i--)
-                    addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
+                    addr_vec[i] = slice_lower_bits(p_addr, addr_bits[i]);
                 break;
             case int(Type::RoBaRaCoCh):
-                addr_vec[0] = slice_lower_bits(addr, addr_bits[0]);
-                addr_vec[addr_bits.size() - 1] = slice_lower_bits(addr, addr_bits[addr_bits.size() - 1]);
+                addr_vec[0] = slice_lower_bits(p_addr, addr_bits[0]);
+                addr_vec[addr_bits.size() - 1] = slice_lower_bits(p_addr, addr_bits[addr_bits.size() - 1]);
                 for (int i = 1; i <= int(HBM::Level::Row); i++)
-                    addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
+                    addr_vec[i] = slice_lower_bits(p_addr, addr_bits[i]);
                 break;
             default:
                 assert(false);
