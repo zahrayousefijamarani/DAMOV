@@ -2898,7 +2898,7 @@ public:
       return addr;
 }
 
-vector<int> address_to_address_vector(const long& p_addr) {
+vector<int> address_to_address_vector(long& p_addr) {
       // cout << "The input address is " << *p_addr;
       vector<int> addr_vec;
       addr_vec.resize(addr_bits.size());
