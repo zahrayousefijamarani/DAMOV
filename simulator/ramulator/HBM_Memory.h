@@ -2850,6 +2850,18 @@ public:
         if (subscription_prefetcher_type != SubscriptionPrefetcherType::None) {
           prefetcher_set.tick();
         }
+        // if (int(num_dram_cycles.value()) % 10000 == 0 && num_dram_cycles.value() !=0){
+        //     std::ofstream output_file("sub_count.txt", std::ios_base::app);
+        //     for (AddressAccCountEntry &e : addressAccCountTable) output_file << e.ctrl << ", " << e.bank << "," << e.column << ", " << e.row << "\n";
+        //     addressAccCountTable.clear();
+        //     // std::ostream_iterator<std::string> output_iterator(output_file, "\n");
+        //     // std::copy(addressAccCountTable.begin(), addressAccCountTable.end(), output_iterator);
+        //     // for (AddressAccCountEntry i = addressAccCountTable.begin(); i != addressAccCountTable.end(); ++i){
+        //         // output_file << i->addr << "," << int(i->ctrl) << "\n";
+        //     // }
+        //     output_file.close();
+               
+        // }
 
     }
     long address_vector_to_address(const vector<int>& addr_vec) {
@@ -2860,7 +2872,11 @@ public:
       long bank = addr_vec[int(HBM::Level::Bank)];
       long row = addr_vec[int(HBM::Level::Row)];
       long column = addr_vec[int(HBM::Level::Column)];
-        
+      
+///----------- check here -----------
+
+// Types are :         ChRaBaRoCo,  RoBaRaCoCh,
+       
       //int column_significant_bits = addr_bits[int(HBM::Level::Column)] - max_block_col_bits;
       switch(int(type)) {
         case int(Type::ChRaBaRoCo): {
@@ -2875,6 +2891,10 @@ public:
           addr |= row;
           addr <<= addr_bits[int(HBM::Level::Column)];
           addr |= column;
+          // addr <<= column_significant_bits;
+          // addr |= (column >> max_block_col_bits);
+          // addr <<= max_block_col_bits;
+          // addr |= column & ((1<<max_block_col_bits) - 1);
         }
         break;
         case int(Type::RoBaRaCoCh): {
@@ -2885,24 +2905,29 @@ public:
           addr |= bank_group;
           addr <<= addr_bits[int(HBM::Level::Rank)];
           addr |= rank; 
+          // addr <<= column_significant_bits;
+          // addr |= (column >> max_block_col_bits);
           addr <<= addr_bits[int(HBM::Level::Column)];
           addr |= column;          
           addr <<= addr_bits[int(HBM::Level::Channel)];
           addr |= vault;
+          // addr <<= max_block_col_bits;
+          // addr |= column & ((1<<max_block_col_bits) - 1);
         }
         break;
         default:
             assert(false);
       }
+//----------- check here -----------
       // cout << " and after translation, the original address is: " << addr << endl;
       return addr;
 }
 
 vector<int> address_to_address_vector(long& p_addr) {
-      // cout << "The input address is " << *p_addr;
+      // cout << "The input address is " << p_addr;
       vector<int> addr_vec;
       addr_vec.resize(addr_bits.size());
-      //clear_lower_bits(p_addr, tx_bits);
+      clear_lower_bits(p_addr, tx_bits);
 
         switch(int(type)){
             case int(Type::ChRaBaRoCo):
@@ -2945,7 +2970,7 @@ vector<int> address_to_address_vector(long& p_addr) {
         ////////////////////////////////////////////////////////////
 
         // Each transaction size is 2^tx_bits, so first clear the lowest tx_bits bits
-        clear_lower_bits(addr, tx_bits);
+        //clear_lower_bits(addr, tx_bits);
 
         switch(int(type)){
             case int(Type::ChRaBaRoCo):
