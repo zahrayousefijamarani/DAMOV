@@ -1984,7 +1984,7 @@ public:
         // If we have the address in the subscription table, we have it in LRU or LFU unit, and we send it to the unit for counting
         if(subscription_tables[original_vault_id].is_subscribed(addr) || subscription_tables[original_vault_id].is_pending_removal(addr)) {
           val_vault_id = subscription_tables[original_vault_id][addr];
-          cout << "THE NEW SUBSCRIBED VAULT IS : " << val_vault_id <<endl;
+          // cout << "THE NEW SUBSCRIBED VAULT IS : " << val_vault_id <<endl;
           if(subscription_table_replacement_policy == SubscriptionPrefetcherReplacementPolicy::LRU) {
             // Update the LRU entries of the address in from table (located in the original vault) and to table (located in the current subscribed vault)
             lru_units[original_vault_id].touch(addr);
