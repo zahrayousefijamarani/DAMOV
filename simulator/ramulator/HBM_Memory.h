@@ -2954,8 +2954,8 @@ vector<int> address_to_address_vector(const long& p_addr) {
         // for (int i = addr_bits.size() - 1; i >= 0; i--){
         //   cout << "adrr_bits[" << i << "] = "<< addr_bits[i];
         // }
-         cout << " And after translation, it is in Vault " << addr_vec[int(HBM::Level::Channel)] << " BankGroup " << addr_vec[int(HBM::Level::BankGroup)]
-           << " Bank " << addr_vec[int(HBM::Level::Bank)] << " Row " << addr_vec[int(HBM::Level::Row)] << " Column " << addr_vec[int(HBM::Level::Column)] << endl;
+        //  cout << " And after translation, it is in Vault " << addr_vec[int(HBM::Level::Channel)] << " BankGroup " << addr_vec[int(HBM::Level::BankGroup)]
+          //  << " Bank " << addr_vec[int(HBM::Level::Bank)] << " Row " << addr_vec[int(HBM::Level::Row)] << " Column " << addr_vec[int(HBM::Level::Column)] << endl;
         return addr_vec;
     }
 
