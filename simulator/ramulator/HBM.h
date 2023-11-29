@@ -5,6 +5,13 @@
 #include "Request.h"
 #include <vector>
 #include <functional>
+#include <map>
+#include <string>
+
+#define DATA_LENGTH 5
+#define WRITE_LENGTH DATA_LENGTH
+#define READ_LENGTH (DATA_LENGTH+1)
+#define OTHER_LENGTH 1
 
 using namespace std;
 
@@ -115,6 +122,15 @@ public:
         Command::REF, Command::PDE, Command::SRE
     };
 
+//////////////////  to be checked //////////////////
+    // struct MaxBlockEntry {
+    //   int max_block_size;
+    //   int flit_num_bits;
+    // } maxblock_table[int(MaxBlock::MAX)] = {
+    //   {32, 5}, {64, 6}, {128, 7}, {256, 8},
+    // }, maxblock_entry;
+///////////////////////////////////////////////////
+
     /* Prereq */
     function<Command(DRAM<HBM>*, Command cmd, int)> prereq[int(Level::MAX)][int(Command::MAX)];
 
@@ -147,9 +163,16 @@ public:
         HBM_4Gb_bank128,
         HBM_4Gb_bank256,
         HBM_4Gb_bank512,
+        
+        HBM_4GB_va4,
+        HBM_4GB_va32,
+        HBM_4GB_va64,
+        HBM_4GB_va128,
+        //HBM_4GB_va256,
+        //HBM_4GB_va512,
         MAX
     };
-
+ //Channel, Rank, BankGroup, Bank, Row, Column, MAX
     struct OrgEntry {
         int size;
         int dq;
@@ -163,6 +186,12 @@ public:
         {4<<10, 128, {0, 0, 4, 32, 1<<11, 1<<(6+1)}},
         {4<<10, 128, {0, 0, 4, 64, 1<<10, 1<<(6+1)}},
         {4<<10, 128, {0, 0, 4, 128, 1<<9, 1<<(6+1)}},
+
+        {4<<10, 128, {4, 0, 4, 4, 1<<11, 1<<(6+1)}},
+        {4<<10, 128, {32, 0, 4, 4, 1<<8, 1<<(6+1)}},
+        {4<<10, 128, {64, 0, 4, 4, 1<<7, 1<<(6+1)}},
+        {4<<10, 128, {128, 0, 4, 4, 1<<6, 1<<(6+1)}}
+
     }, org_entry;
 
     void set_channel_number(int channel);

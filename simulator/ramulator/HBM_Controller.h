@@ -134,8 +134,18 @@ public:
     RowPolicy<HBM>* rowpolicy;  // determines the row-policy (e.g., closed-row vs. open-row)
     RowTable<HBM>* rowtable;  // tracks metadata about rows (e.g., which are open and for how long)
     Refresh<HBM>* refresh;
-    function<void(const Request&)> update_parent_with_latency;
 
+    long long total_hbm_latency = 0;
+    long long total_latency = 0;
+    long long total_transfer_latency = 0;
+    long long total_in_memory_latency = 0;
+    long long total_cycle_waiting_not_ready_request = 0;
+    long long total_process_latency = 0;
+    long long total_incoming_queuing_latency = 0;
+    long long total_outgoing_queuing_latency = 0;
+    long long total_bursts = 0;
+    long long stalled_cycles = 0;
+    function<void(const Request&)> update_parent_with_latency;
 
     struct Queue {
         list<Request> q;
@@ -632,15 +642,11 @@ public:
                   
 		        channel->update_serving_requests(
                   req.addr_vec.data(), -1, clk);
-
                 }
                 if (req.type == Request::Type::READ || req.type == Request::Type::WRITE) {
                   req.callback(req);
                   pending.pop_front();
                }
-               if(update_parent_with_latency) {
-                    update_parent_with_latency(req);
-                }
             }
         }
         /*** 1.1. Serve completed writes ***/
@@ -737,11 +743,6 @@ public:
         // remove request from queue
         queue->q.erase(req);
     }
-
-    void attach_parent_update_latency_function(function<void(const Request&)> partent_function) {
-        update_parent_with_latency = partent_function;
-    }
-
     bool is_ready(list<Request>::iterator req)
     {
         typename HBM::Command cmd = get_first_cmd(req);
@@ -783,6 +784,11 @@ public:
       return clk <= channel->end_of_refreshing;
     }
     void record_core(int coreid) {
+    }
+
+
+    void attach_parent_update_latency_function(function<void(const Request&)> partent_function) {
+        update_parent_with_latency = partent_function;
     }
 private:
     typename HBM::Command get_first_cmd(list<Request>::iterator req)

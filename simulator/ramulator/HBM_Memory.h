@@ -505,11 +505,12 @@ public:
           }
         }
         bool has(long addr) const{
-          for (const auto& pair : address_translation_table) {
-        // std::cout << "addr: " << pair.first << ", vault: " << pair.second.vault <<
-        //  ", status: " << int(pair.second.status )
-        // << std::endl;
-    }
+    //       for (const auto& pair : address_translation_table) {
+    //     std::cout << "addr: " << pair.first << ", vault: " << pair.second.vault <<
+    //      ", status: " << int(pair.second.status )
+    //     << std::endl;
+    // }
+    //std::cout << endl;
           return address_translation_table.count(addr) > 0;}
         bool has(long addr, int vault)const{
           if(has(addr)){
@@ -996,7 +997,7 @@ public:
         print_debug_info("Debug Mode On.");
       }
       vector<int> address_to_address_vector(long addr){
-        addr <<= tailing_zero;
+        addr <<= mem_ptr ->tx_bits;
         return mem_ptr -> address_to_address_vector(addr);
       }
       long address_vector_to_address(const vector<int> addr_vec) {
@@ -1007,6 +1008,7 @@ public:
       int find_original_vault_of_address(long addr){
         vector<int> addr_vec = address_to_address_vector(addr);
          print_debug_info("The original vault of address "+to_string(addr)+" is "+to_string(addr_vec[int(HBM::Level::Channel)]));
+         //cout << "The original vault of address "+to_string(addr)+" is "+to_string(addr_vec[int(HBM::Level::Channel)]);
         return addr_vec[int(HBM::Level::Channel)];
       }
       long find_victim_for_unsubscription(int vault, long addr) const {
@@ -1238,7 +1240,7 @@ public:
         SubscriptionTask task = SubscriptionTask(addr, req_vault, original_vault, hops, SubscriptionTask::Type::SubReq, count);
         //cout << "SubReq task generated from " << task.from_vault << " to " << task.to_vault << " addr " << task.addr << endl;
         // If the original vault of the address is the current vault (i.e. we have an address subscribed elsewhere and we want it back), we need to process unsubscription
-        if(original_vault == req_vault) {
+        if(original_vault == req_vault /*&& original_vault != subscribed_vault*/ ) {
           // cout << "addr " << addr << " is currently in the same to vault as subscribe vault" << endl;
           unsubscribe_address(req_vault, addr);                            ////// changed - bishoy
         // If we have space to insert it into the subscription table and to receive the data, we push it into the network
@@ -1451,7 +1453,7 @@ public:
       }
       // Start the unsubscription process by determining if the unsubscription is made by the holder of the address, and act accordingly
       void unsubscribe_address(int caller_vault, long addr) {
-        //cout << "unsubscribe_address from " << caller_vault <<endl;
+       // cout << "unsubscribe_address from " << caller_vault <<endl;
         if(!subscription_tables[caller_vault].has(addr)) {
           cout << ("We have addr "+to_string(addr)+" for subscription from vault "+to_string(caller_vault)+" but we do not have it");
         }
@@ -1968,7 +1970,7 @@ public:
         }
       }
       void pre_process_addr(long& addr) {
-        mem_ptr -> clear_lower_bits(addr, mem_ptr -> tx_bits + tailing_zero);                 
+        mem_ptr -> clear_lower_bits(addr, mem_ptr -> tx_bits);                 
       }
       // A rewritten function that updates LRU entries, translates old address to the correct vault, and then update counter table and check for prefetch
       void access_address(Request& req) {
@@ -1982,7 +1984,7 @@ public:
         // If we have the address in the subscription table, we have it in LRU or LFU unit, and we send it to the unit for counting
         if(subscription_tables[original_vault_id].is_subscribed(addr) || subscription_tables[original_vault_id].is_pending_removal(addr)) {
           val_vault_id = subscription_tables[original_vault_id][addr];
-          //cout << "THE NEW SUBSCRIBED VAULT IS : " << val_vault_id <<endl;
+          cout << "THE NEW SUBSCRIBED VAULT IS : " << val_vault_id <<endl;
           if(subscription_table_replacement_policy == SubscriptionPrefetcherReplacementPolicy::LRU) {
             // Update the LRU entries of the address in from table (located in the original vault) and to table (located in the current subscribed vault)
             lru_units[original_vault_id].touch(addr);
@@ -2923,28 +2925,37 @@ public:
       return addr;
 }
 
-vector<int> address_to_address_vector(long& p_addr) {
-      // cout << "The input address is " << p_addr;
+vector<int> address_to_address_vector(const long& p_addr) {
+      long addr = p_addr;
+      // cout << "The input address is " << addr;
       vector<int> addr_vec;
       addr_vec.resize(addr_bits.size());
-      clear_lower_bits(p_addr, tx_bits);
+      clear_lower_bits(addr, tx_bits);
+      //std::bitset<sizeof(long) * 8> binaryRepresentation(addr);
 
+    // Print the binary representation
+      //std::cout << "Binary representation of " << addr << " is: " << binaryRepresentation << std::endl;
         switch(int(type)){
             case int(Type::ChRaBaRoCo):
+                //cout << "ChRaBaRoCo" << endl;
                 for (int i = addr_bits.size() - 1; i >= 0; i--)
-                    addr_vec[i] = slice_lower_bits(p_addr, addr_bits[i]);
+                    addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
                 break;
             case int(Type::RoBaRaCoCh):
-                addr_vec[0] = slice_lower_bits(p_addr, addr_bits[0]);
-                addr_vec[addr_bits.size() - 1] = slice_lower_bits(p_addr, addr_bits[addr_bits.size() - 1]);
+                //cout << "RoBaRaCoCh" << endl;
+                addr_vec[0] = slice_lower_bits(addr, addr_bits[0]);
+                addr_vec[addr_bits.size() - 1] = slice_lower_bits(addr, addr_bits[addr_bits.size() - 1]);
                 for (int i = 1; i <= int(HBM::Level::Row); i++)
-                    addr_vec[i] = slice_lower_bits(p_addr, addr_bits[i]);
+                    addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
                 break;
             default:
                 assert(false);
         }
-        // cout << " And after translation, it is in Vault " << addr_vec[int(HBM::Level::Vault)] << " BankGroup " << addr_vec[int(HBM::Level::BankGroup)]
-        //     << " Bank " << addr_vec[int(HBM::Level::Bank)] << " Row " << addr_vec[int(HBM::Level::Row)] << " Column " << addr_vec[int(HBM::Level::Column)] << endl;
+        // for (int i = addr_bits.size() - 1; i >= 0; i--){
+        //   cout << "adrr_bits[" << i << "] = "<< addr_bits[i];
+        // }
+         cout << " And after translation, it is in Vault " << addr_vec[int(HBM::Level::Channel)] << " BankGroup " << addr_vec[int(HBM::Level::BankGroup)]
+           << " Bank " << addr_vec[int(HBM::Level::Bank)] << " Row " << addr_vec[int(HBM::Level::Row)] << " Column " << addr_vec[int(HBM::Level::Column)] << endl;
         return addr_vec;
     }
 
@@ -2956,9 +2967,11 @@ vector<int> address_to_address_vector(long& p_addr) {
     {
         req.addr_vec.resize(addr_bits.size());
         req.burst_count = cacheline_size / (1 << tx_bits);
+
+        //clear_higher_bits(req.addr, max_address-1ll);
+
         long addr = req.addr;
         int coreid = req.coreid;
-
        ////////////////   for debugging /////////////////////
         if(mem_req_count-1 >= warmup_reqs && !warmup_finished) {
           warmup_finished = true;
@@ -2969,23 +2982,30 @@ vector<int> address_to_address_vector(long& p_addr) {
         }
         ////////////////////////////////////////////////////////////
 
-        // Each transaction size is 2^tx_bits, so first clear the lowest tx_bits bits
-        //clear_lower_bits(addr, tx_bits);
+        /// Each transaction size is 2^tx_bits, so first clear the lowest tx_bits bits
+       // vector<int> adddd_vec =  address_to_address_vector(addr);
+       // cout << "original vault of address " << addr << " before clearing.. = " << adddd_vec[int(HBM::Level::Channel)] << endl; 
+       // clear_lower_bits(addr, tx_bits);
 
-        switch(int(type)){
-            case int(Type::ChRaBaRoCo):
-                for (int i = addr_bits.size() - 1; i >= 0; i--)
-                    req.addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
-                break;
-            case int(Type::RoBaRaCoCh):
-                req.addr_vec[0] = slice_lower_bits(addr, addr_bits[0]);
-                req.addr_vec[addr_bits.size() - 1] = slice_lower_bits(addr, addr_bits[addr_bits.size() - 1]);
-                for (int i = 1; i <= int(HBM::Level::Row); i++)
-                    req.addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
-                break;
-            default:
-                assert(false);
-        }
+      //  adddd_vec =  address_to_address_vector(addr);
+       // cout << "original vault of address " << addr << " after clearing.. = " << adddd_vec[int(HBM::Level::Channel)] << endl;
+
+        vector<int> addr_vec = address_to_address_vector(addr);
+        req.addr_vec = addr_vec;
+        // switch(int(type)){
+        //     case int(Type::ChRaBaRoCo):
+        //         for (int i = addr_bits.size() - 1; i >= 0; i--)
+        //             req.addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
+        //         break;
+        //     case int(Type::RoBaRaCoCh):
+        //         req.addr_vec[0] = slice_lower_bits(addr, addr_bits[0]);
+        //         req.addr_vec[addr_bits.size() - 1] = slice_lower_bits(addr, addr_bits[addr_bits.size() - 1]);
+        //         for (int i = 1; i <= int(HBM::Level::Row); i++)
+        //             req.addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
+        //         break;
+        //     default:
+        //         assert(false);
+        // }
       
         ////////////////////////////
         int original_vault = req.addr_vec[int(HBM::Level::Channel)];
@@ -3003,7 +3023,7 @@ vector<int> address_to_address_vector(long& p_addr) {
 
           ////////////////////////////////////////////
 
-      req.arrive_hmc = clk;
+      //req.arrive_hmc = clk;
 
       if(pim_mode_enabled )
       { 
@@ -3015,19 +3035,21 @@ vector<int> address_to_address_vector(long& p_addr) {
             //   no_prefetcher_hops = 0;
             //   actual_hops = 0;
             // }
+                // cout << "REQUEST TYPE = " << int(req.type) <<endl;
+                // cout << "REQUESTER VAULT = " << requester_vault <<endl;
+                // cout << "SUBSCRIBED VAULT = " << subscribed_vault <<endl;
+                // cout << "ORIGINAL VAULT = " << original_vault <<endl;
+                // cout << "addr = " <<(req.addr >> tx_bits)<<endl;
             no_prefetcher_hops = calculate_extra_movement_latency(req.coreid, req.childid, req.addr_vec[int(HBM::Level::Channel)], req.addr_vec[int(HBM::Level::BankGroup)], req.type == Request::Type::READ);
-            if(subscription_prefetcher_type == SubscriptionPrefetcherType::None){
+            if (req.type == Request::Type::READ){
+              // If we do not use prefetcher, we calculate hops the traditional way
+              no_prefetcher_hops = calculate_hops_travelled(requester_vault, original_vault, READ_LENGTH);
+              if(subscription_prefetcher_type == SubscriptionPrefetcherType::None){
                 // Let's assume 1 Flit = 128 bytes
                 // A read request is 64 bytes
                 // One read request will take = 1 Flit*hops + 5*hops
                 hops = no_prefetcher_hops;
               } else {
-                // cout << "REQUEST TYPE = " << int(req.type) <<endl;
-                // cout << "REQUESTER VAULT = " << requester_vault <<endl;
-                // cout << "SUBSCRIBED VAULT = " << subscribed_vault <<endl;
-                // cout << "ORIGINAL VAULT = " << original_vault <<endl;
-
-                if (req.type == Request::Type::READ){
                 hops = 0;
                 if(requester_vault != subscribed_vault) {
                   // We first check the subscription table of the original vault
@@ -3037,25 +3059,71 @@ vector<int> address_to_address_vector(long& p_addr) {
                   // Then the subscribed vault send the data back to the requester vault
                   hops += calculate_hops_travelled(subscribed_vault, requester_vault, DATA_LENGTH);
                 }
-                }else if (req.type == Request::Type::WRITE) {
-                  //cout << "write command" <<endl;
-                  no_prefetcher_hops = calculate_hops_travelled(requester_vault, original_vault, WRITE_LENGTH);
-                  if(requester_vault != subscribed_vault) {
+              }
+            }
+            else if (req.type == Request::Type::WRITE){
+              no_prefetcher_hops = calculate_hops_travelled(requester_vault, original_vault, WRITE_LENGTH);
+              if(requester_vault != subscribed_vault) {
                 // We write to the original vault in any case, and let the original vault determine whether to fowraed it or not
-                    hops = no_prefetcher_hops;
-                  } else {
-                   // cout << "requester === subscribed" <<endl;
-                    hops = 0;
-                  }
+                hops = no_prefetcher_hops;
+              } else {
+                hops = 0;
+              }
+            // What is "OTHER"?
+            } else {
+              no_prefetcher_hops = calculate_hops_travelled(requester_vault, original_vault, OTHER_LENGTH);
+              if(subscription_prefetcher_type == SubscriptionPrefetcherType::None) {
+                hops = no_prefetcher_hops;
+              } else {
+                if(requester_vault == subscribed_vault) {
+                  hops = 0;
                 } else {
-                    if(requester_vault == subscribed_vault) {
-                      hops = 0;
-                    } else {
-                      // The requester first send data to the original vault, then the original vault forward it to the subscribed vault
-                      hops = calculate_hops_travelled(requester_vault, original_vault)+calculate_hops_travelled(original_vault, subscribed_vault);
-                    } 
+                  // The requester first send data to the original vault, then the original vault forward it to the subscribed vault
+                  hops = calculate_hops_travelled(requester_vault, original_vault)+calculate_hops_travelled(original_vault, subscribed_vault);
                 }
               }
+            }
+            // if(subscription_prefetcher_type == SubscriptionPrefetcherType::None){
+            //     // Let's assume 1 Flit = 128 bytes
+            //     // A read request is 64 bytes
+            //     // One read request will take = 1 Flit*hops + 5*hops
+            //     hops = no_prefetcher_hops;
+            //   } else {
+            //     cout << "REQUEST TYPE = " << int(req.type) <<endl;
+            //     cout << "REQUESTER VAULT = " << requester_vault <<endl;
+            //     cout << "SUBSCRIBED VAULT = " << subscribed_vault <<endl;
+            //     cout << "ORIGINAL VAULT = " << original_vault <<endl;
+            //     cout << "addr = " <<(req.addr >> tx_bits)<<endl;
+
+            //     if (req.type == Request::Type::READ){
+            //     hops = 0;
+            //     if(requester_vault != subscribed_vault) {
+            //       // We first check the subscription table of the original vault
+            //       hops += calculate_hops_travelled(requester_vault, original_vault);
+            //       // Then the original vault forward this request to the subscribed vault
+            //       hops += calculate_hops_travelled(original_vault, subscribed_vault);
+            //       // Then the subscribed vault send the data back to the requester vault
+            //       hops += calculate_hops_travelled(subscribed_vault, requester_vault, DATA_LENGTH);
+            //     }
+            //     }else if (req.type == Request::Type::WRITE) {
+            //       //cout << "write command" <<endl;
+            //       no_prefetcher_hops = calculate_hops_travelled(requester_vault, original_vault, WRITE_LENGTH);
+            //       if(requester_vault != subscribed_vault) {
+            //     // We write to the original vault in any case, and let the original vault determine whether to fowraed it or not
+            //         hops = no_prefetcher_hops;
+            //       } else {
+            //        // cout << "requester === subscribed" <<endl;
+            //         hops = 0;
+            //       }
+            //     } else {
+            //         if(requester_vault == subscribed_vault) {
+            //           hops = 0;
+            //         } else {
+            //           // The requester first send data to the original vault, then the original vault forward it to the subscribed vault
+            //           hops = calculate_hops_travelled(requester_vault, original_vault)+calculate_hops_travelled(original_vault, subscribed_vault);
+            //         } 
+            //     }
+            //   }
             req.hops = hops;
             if(req.type == Request::Type::READ)
             {
